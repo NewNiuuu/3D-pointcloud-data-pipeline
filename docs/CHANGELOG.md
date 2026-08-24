@@ -23,6 +23,39 @@
 
 ## 2026-08-24
 
+### `[实现]` 专家模型许可核验与部署 — Agent
+
+用户要求部署文档中提到的专家模型（特别指定 DA3）。按 SPEC §23.2，**候选等级不等于使用许可**，先逐个核验代码/权重许可再部署。
+
+**许可核验结果 —— 全部可用，无一构成阻塞**：DA3 代码与 `DA3-LARGE-1.1`/`DA3-BASE`/`DA3METRIC-LARGE` 均 Apache-2.0（**SPEC §14.1 所称 "DA3-1.1 Apache-compatible variant" 核验属实**；但 `DA3NESTED-GIANT-LARGE` 是 cc-by-nc-4.0，同项目不同变体许可不同）；SAM 2.1 / Grounding DINO / DINOv2 为 Apache-2.0；OneFormer / Florence-2 / MoGe-3 为 MIT。
+
+**已部署并在真实 UAVScenes 图像上验证通过**（非合成输入）：
+
+| 模型 | 峰值显存 | 实测输出 |
+|---|---:|---|
+| DA3-LARGE-1.1 | 3.62 GB | 3 图 @504 前向 0.74s |
+| Grounding DINO Base | 2.01 GB | 检出 building/road 等 4 框 |
+| DINOv2 Base | 0.37 GB | CLS embedding (1,768) |
+| SAM 2.1 Base+ | — | mask (1,3,2048,2448)，iou 0.843 |
+
+**关键判定**：DA3-LARGE-1.1 输出的是 **`relative` 深度**（`is_metric` 为空、`scale_factor` 为 None、depth 落在 0.57~1.02），按铁律 8 不得直接产出绝对米制目标。需 metric 第二意见应改用 `DA3METRIC-LARGE`（同 Apache-2.0，未部署）。
+
+**三个有问题的**：
+
+1. **OneFormer** —— 可运行但 `swin.layernorm.weight/bias` 在 transformers 5.15.1 下报 `MISSING` 并被随机初始化，输出可信度存疑。它产出的是 §14.5 的 sky/water 无效几何掩码，错误会直接污染 G2，**确定兼容版本前不得启用**。
+2. **Florence-2** —— `Florence2LanguageConfig` 缺 `forced_bos_token_id`，其 remote code 按旧版 transformers 编写。不为它降级主环境（会影响已验证的其他四个模型）。
+3. **MoGe-3** —— 几何专家接入顺序的**首选**，但存在硬冲突：MoGe 要 `numpy>=2`，VGGT-Ω 与 DA3 要 `numpy<2`；另需 `flex-gemm` CUDA 扩展与 `utils3d_moge` 专用 fork。**解决方案：独立 conda 环境 + 文件交换**，这与它"关键帧离线交叉校验"的角色天然相容。
+
+**新增** `registry/experts/` 7 张专家卡（SPEC §23.2 要求的分层许可、I/O 契约、实测数据、UAV 验证状态、阻塞项），以及 `docs/EXPERT_DEPLOYMENT.md` 总览。
+
+**两个安装陷阱已记录**：numpy 会被 imageio/plyfile/utils3d 反复拉到 2.x，每批依赖装完必须重新钉住并校验；DA3 的 xformers/open3d/fastapi 均可跳过（分别是可选加速路径、bench、web 服务），用 `--no-deps` 装本体可避开 xformers 换掉 torch。
+
+**GPU**：全部推理在占卡程序持续运行下完成（剩余约 13 GB/卡），未中断保活。
+
+**涉及文件**：`registry/experts/*.yaml`（新建 7 个）、`docs/EXPERT_DEPLOYMENT.md`（新建）
+
+---
+
 ### `[需求]` `[修正]` 改用项目专属 conda 环境，不碰共享 base — 用户
 
 **要求**：使用模型相关依赖时不要动共享 base 环境，为本项目建隔离环境。随后进一步要求用 **conda** 而非 venv。

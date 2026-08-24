@@ -1,0 +1,27 @@
+# Expert Card: Florence-2 Large
+# Contract: CLAUDE_CODE_PROJECT_SPEC.md §23.2 (expert-registry-manager)
+# 核验日期: 2026-08-24
+
+expert_id: florence2_large
+display_name: Florence-2 Large
+card_version: 0.1.0
+role: attribute_and_caption_proposals
+spec_ref: SPEC §14.1
+research_tier: A0
+deployment_status: blocked
+sources:
+  weights: https://huggingface.co/microsoft/Florence-2-large
+license:
+  code: MIT
+  weights: mit
+  gated: false
+  training_allowed: true
+  evaluation_only: false
+  verified_at: '2026-08-24'
+measured:
+  weights_downloaded_gb: 3.12
+uav_validation_status: not_started
+production_ready: false
+blocking_issues:
+- transformers 5.15.1 与其 trust_remote_code 实现不兼容：Florence2LanguageConfig 缺 forced_bos_token_id。需降级 transformers
+  或等待官方适配；不得为它单独降级本项目主环境的 transformers

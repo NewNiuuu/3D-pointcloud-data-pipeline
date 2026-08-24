@@ -1,0 +1,37 @@
+# Expert Card: SAM 2.1 Hiera Base+
+# Contract: CLAUDE_CODE_PROJECT_SPEC.md §23.2 (expert-registry-manager)
+# 核验日期: 2026-08-24
+
+expert_id: sam2_1_hiera_base_plus
+display_name: SAM 2.1 Hiera Base+
+card_version: 0.1.0
+role: mask_generation_and_video_tracking
+spec_ref: SPEC §14.1 / §34 tracking
+research_tier: A0
+deployment_status: deployed_verified
+sources:
+  weights: https://huggingface.co/facebook/sam2.1-hiera-base-plus
+license:
+  code: Apache-2.0
+  weights: apache-2.0
+  gated: false
+  training_allowed: true
+  evaluation_only: false
+  verified_at: '2026-08-24'
+io_contract:
+  entry: transformers.Sam2Model + Sam2Processor
+  outputs:
+    pred_masks: (B,1,3,H',W')
+    iou_scores: (B,1,3)
+  note: 加载时 transformers 提示 sam2_video checkpoint 载入 Sam2Model，视频跟踪路径需另行核验
+measured:
+  tested_on: UAVScenes AMtown01 单点提示
+  mask_shape: (1,3,2048,2448)
+  iou_scores:
+  - 0.159
+  - 0.714
+  - 0.843
+uav_validation_status: not_started
+production_ready: false
+blocking_issues:
+- 视频跟踪（Sam2VideoModel）路径尚未验证，当前只验证了单帧 mask

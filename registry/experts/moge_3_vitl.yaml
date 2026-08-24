@@ -1,0 +1,33 @@
+# Expert Card: MoGe-3 ViT-L
+# Contract: CLAUDE_CODE_PROJECT_SPEC.md §23.2 (expert-registry-manager)
+# 核验日期: 2026-08-24
+
+expert_id: moge_3_vitl
+display_name: MoGe-3 ViT-L
+card_version: 0.1.0
+role: primary_independent_metric_geometry_cross_check
+spec_ref: SPEC §14.1 / §34 primary_geometry_cross_check（几何专家接入顺序的首位）
+research_tier: A0
+deployment_status: blocked_env_conflict
+sources:
+  repository: https://github.com/microsoft/MoGe
+  weights: https://huggingface.co/Ruicheng/moge-3-vitl
+license:
+  code: MIT
+  weights: mit
+  gated: false
+  training_allowed: true
+  evaluation_only: false
+  verified_at: '2026-08-24'
+  note: SPEC §14.2 要求的 'after weight-license confirmation' 已完成：MIT，无额外限制
+measured:
+  weights_downloaded_gb: 1.48
+uav_validation_status: not_started
+production_ready: false
+blocking_issues:
+- 依赖冲突：MoGe 要求 numpy>=2，而 VGGT-Ω 与 DA3 均要求 numpy<2 —— 三者不能共存于同一环境
+- 需要 flex-gemm（指定 commit 的 CUDA 扩展，github.com/JeffreyXiang/FlexGEMM）与 utils3d_moge 专用 fork，非 PyPI 版 utils3d
+resolution_plan:
+- 为 MoGe 建独立 conda 环境（如 nyp-moge），与主环境通过文件交换输出
+- 该方案与其角色相容：MoGe 作为关键帧上的离线几何交叉校验，本就不需要与 VGGT-Ω 同进程
+- SPEC §14.12 要求的对齐与残差计算在主环境完成，输入为 MoGe 导出的深度/法向文件

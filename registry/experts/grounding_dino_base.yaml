@@ -1,0 +1,39 @@
+# Expert Card: Grounding DINO Base
+# Contract: CLAUDE_CODE_PROJECT_SPEC.md §23.2 (expert-registry-manager)
+# 核验日期: 2026-08-24
+
+expert_id: grounding_dino_base
+display_name: Grounding DINO Base
+card_version: 0.1.0
+role: open_vocabulary_detection_proposals
+spec_ref: SPEC §14.1 Grounded-SAM-2 的检测端
+research_tier: A0
+deployment_status: deployed_verified
+sources:
+  weights: https://huggingface.co/IDEA-Research/grounding-dino-base
+license:
+  code: Apache-2.0
+  weights: apache-2.0
+  gated: false
+  training_allowed: true
+  evaluation_only: false
+  verified_at: '2026-08-24'
+io_contract:
+  entry: transformers.AutoModelForZeroShotObjectDetection
+  outputs:
+    boxes: (K,4) xyxy
+    scores: (K,)
+    text_labels: list[str]
+  note: SPEC §14.1 强制：detector box/class 置信度与 SAM mask 置信度必须分别保存；不得把框内像素整体提升到 3D
+measured:
+  tested_on: UAVScenes AMtown01
+  peak_vram_gb: 2.01
+  threshold: 0.3
+  detections: 4
+  labels_sample:
+  - a building
+  - a road
+  - a road
+uav_validation_status: not_started
+production_ready: false
+blocking_issues: []

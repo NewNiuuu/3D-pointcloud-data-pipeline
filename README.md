@@ -416,3 +416,4 @@ tests/           141 项，全部通过
 | `PENDING_DELETIONS.md` | 用户 | 待删除内容与删除命令（Agent 不执行删除） |
 | `BASELINE_POINTCLOUD_ANALYSIS.md` | 人类与 Agent | blob 上现有 VGGT-Ω 点云语料的实测分析：格式、尺度、任务形态 |
 | `VGGT_OMEGA_DEPLOYMENT.md` | 人类与 Agent | VGGT-Ω 的可获取性、许可分层、环境部署与实测输出契约 |
+| `EXPERT_DEPLOYMENT.md` | 人类与 Agent | 专家模型的许可核验、部署状态与实测；逐模型详情见 `registry/experts/` |
