@@ -1,14 +1,18 @@
 # Expert Card: MoGe-3 ViT-L
-# Contract: CLAUDE_CODE_PROJECT_SPEC.md §23.2 (expert-registry-manager)
+# Contract: CLAUDE_CODE_PROJECT_SPEC.md §23.2
 # 核验日期: 2026-08-24
 
 expert_id: moge_3_vitl
 display_name: MoGe-3 ViT-L
-card_version: 0.1.0
+card_version: 0.2.0
 role: primary_independent_metric_geometry_cross_check
-spec_ref: SPEC §14.1 / §34 primary_geometry_cross_check（几何专家接入顺序的首位）
+spec_ref: SPEC §14.1 / §34
 research_tier: A0
-deployment_status: blocked_env_conflict
+deployment_status: deployed_verified_isolated_env
+environment:
+  conda_env: nyp-moge
+  reason: MoGe 要求 numpy>=2，与 VGGT-Ω/DA3 的 numpy<2 冲突
+  exchange: 通过文件交换输出，不与主环境同进程
 sources:
   repository: https://github.com/microsoft/MoGe
   weights: https://huggingface.co/Ruicheng/moge-3-vitl
@@ -19,15 +23,30 @@ license:
   training_allowed: true
   evaluation_only: false
   verified_at: '2026-08-24'
-  note: SPEC §14.2 要求的 'after weight-license confirmation' 已完成：MIT，无额外限制
+io_contract:
+  entry: moge.model.v3.MoGeModel.from_pretrained('Ruicheng/moge-3-vitl').infer(image_chw)
+  outputs:
+    points: (H,W,3) float32 相机系点
+    depth: (H,W) float32
+    normal: (H,W,3) float32 —— 独立法向，非深度微分所得（满足 §14.14 要求）
+    mask: (H,W) bool 有效性掩码
+    intrinsics: (3,3) 归一化
 measured:
-  weights_downloaded_gb: 1.48
-uav_validation_status: not_started
+  tested_on: UAVScenes AMtown01 真实图 2448x2048
+  peak_vram_gb: 2.87
+  depth_range_m:
+  - 16.744
+  - 22.959
+  points_range:
+  - -19.745
+  - 22.959
+depth_type: metric
+depth_type_evidence: depth 落在 16.7~23.0 的米制量级，与低空无人机对地距离物理相符
+domain_calibrated: false
+metric_capability: 按 SPEC §14.11，模型自称 metric 不等于 UAV 域尺度可信。同帧 LiDAR 真值射线距离中位 33.13 m，与本模型的 16.7~23.0 m
+  存在明显差距，但该对比不严谨（射线距离 vs 垂直深度、传感器原点不同、视场不同），严格验证需相机-LiDAR 外参，而 calibration_results.py 不在 interval=5 档案中。在完成投影验证前，domain_calibrated
+  保持 false，不得产出绝对米制目标。
+uav_validation_status: partial_qualitative
 production_ready: false
 blocking_issues:
-- 依赖冲突：MoGe 要求 numpy>=2，而 VGGT-Ω 与 DA3 均要求 numpy<2 —— 三者不能共存于同一环境
-- 需要 flex-gemm（指定 commit 的 CUDA 扩展，github.com/JeffreyXiang/FlexGEMM）与 utils3d_moge 专用 fork，非 PyPI 版 utils3d
-resolution_plan:
-- 为 MoGe 建独立 conda 环境（如 nyp-moge），与主环境通过文件交换输出
-- 该方案与其角色相容：MoGe 作为关键帧上的离线几何交叉校验，本就不需要与 VGGT-Ω 同进程
-- SPEC §14.12 要求的对齐与残差计算在主环境完成，输入为 MoGe 导出的深度/法向文件
+- 尺度未经 LiDAR 投影验证；需获取 calibration_results.py

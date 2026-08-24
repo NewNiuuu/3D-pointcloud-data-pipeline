@@ -23,6 +23,34 @@
 
 ## 2026-08-24
 
+### `[需求]` 调研结果需另记一份面向人类的简明文档 — 用户
+
+**要求**：调研性质的产出也要记录到类似 README 的人类可读文档中，简明易懂；并再次强调文档必须及时更新。
+
+**改动**：新建 `docs/FINDINGS.md` —— 每条只写「结论一句话 + 为什么重要 + 详情去哪看」，不放实现细节。`CLAUDE.md` 规则 1 新增「调研结果必须双份记录」：详细文档记数据与复现命令，FINDINGS 记结论与影响。
+
+**顺带修正**：`CLAUDE.md` 的章节结构此前被我插乱（规则 3 插进了规则 1 中间，导致「变更日志」「人工输入」等规则 1 的小节跑到规则 3 底下，规则 2 排到最后）。已重排为规则 1 → 2 → 3，各自小节归位。
+
+**涉及文件**：`docs/FINDINGS.md`（新建）、`CLAUDE.md`、`README.md`
+
+---
+
+### `[实现]` 补装 MoGe-3、DA3Metric-Large、CoTracker3 — Agent
+
+**MoGe-3（用户批准独立环境）**：新建 conda env `nyp-moge`（numpy>=2），`flex-gemm` 有预编译 wheel 无需自行编译。真实图像推理通过，峰值 2.87 GB。输出 `points`/`depth`/`normal`/`mask`/`intrinsics`，其中 **`normal` 是独立法向而非深度微分所得**，满足 SPEC §14.14 要求 —— 这使 DSINE 的优先级下降。
+
+**DA3Metric-Large**（Apache-2.0）：峰值 2.91 GB，depth 6.97–23.78 m。**但 `conf`、`extrinsics`、`intrinsics` 全为 `None`** —— 只输出 depth 与 sky 掩码。这意味着它**过不了需要置信度的 G1/G2 门禁**，只能作单目尺度先验与 sky 掩码来源，不能参与位姿交叉校验。
+
+**CoTracker3 Offline**：tracks `(B,T,N,2)` + visibility `(B,T,N)`，峰值 0.86 GB，8 帧可见率 0.971。GitHub API 报 `NOASSERTION`，许可全文尚未人工审查，已记入卡片阻塞项。
+
+**尺度对比（重要）**：同一帧上 DA3-Large-1.1 给 0.57–1.02（归一化）、DA3Metric-Large 给 6.97–23.78 m、MoGe-3 给 16.74–22.96 m，而 LiDAR 真值射线距离中位 33.13 m —— **三者互不一致且都对不上**。这是 SPEC §14.13「多专家不得投票产生真值」的现实例证。
+
+**但该对比不严谨**：射线距离 vs 垂直深度、传感器原点与视场均不同。严格验证需相机-LiDAR 外参投影，而 `calibration_results.py` **不在 interval=5 档案中**。因此所有模型 `domain_calibrated` 保持 `false`，绝对米制目标暂不解锁。已登记 **M-008** 索取该标定文件。
+
+**涉及文件**：`registry/experts/`（moge 更新至 v0.2.0，新增 da3_metric_large、cotracker3_offline，共 9 张卡）、`docs/EXPERT_DEPLOYMENT.md`、`docs/FINDINGS.md`、`docs/MANUAL_INPUTS.md`
+
+---
+
 ### `[实现]` 专家模型许可核验与部署 — Agent
 
 用户要求部署文档中提到的专家模型（特别指定 DA3）。按 SPEC §23.2，**候选等级不等于使用许可**，先逐个核验代码/权重许可再部署。

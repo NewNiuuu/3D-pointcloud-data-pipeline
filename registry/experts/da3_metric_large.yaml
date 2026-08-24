@@ -1,0 +1,48 @@
+# Expert Card: DA3Metric-Large
+# Contract: CLAUDE_CODE_PROJECT_SPEC.md §23.2
+# 核验日期: 2026-08-24
+
+expert_id: da3_metric_large
+display_name: DA3Metric-Large
+card_version: 0.1.0
+role: monocular_metric_depth_prior_and_sky_mask
+spec_ref: SPEC §14.1 深度/尺度第二意见
+research_tier: A0
+deployment_status: deployed_verified
+environment:
+  conda_env: nyp-3dpipe
+sources:
+  repository: https://github.com/ByteDance-Seed/Depth-Anything-3
+  weights: https://huggingface.co/depth-anything/DA3METRIC-LARGE
+license:
+  code: Apache-2.0
+  weights: apache-2.0
+  gated: false
+  training_allowed: true
+  evaluation_only: false
+  verified_at: '2026-08-24'
+io_contract:
+  entry: DepthAnything3.from_pretrained('depth-anything/DA3METRIC-LARGE').inference(images)
+  outputs:
+    depth: (N,H,W) float32 米制
+    sky: (N,H,W) —— §14.5 sky 原因掩码来源
+    conf: None —— 不提供置信度
+    extrinsics: None
+    intrinsics: None
+measured:
+  tested_on: UAVScenes AMtown01 真实图 3 张 @504
+  peak_vram_gb: 2.91
+  depth_range_m:
+  - 6.97
+  - 23.782
+  depth_median_m: 13.297
+depth_type: metric
+domain_calibrated: false
+capability_gaps:
+- 不输出置信度 —— 无法参与需要 depth_conf 的 G1/G2 门禁判定
+- 不估计相机参数 —— 不能用于位姿交叉校验，仅作单目尺度先验
+metric_capability: 同 MoGe：未经 LiDAR 投影验证，domain_calibrated 为 false
+uav_validation_status: partial_qualitative
+production_ready: false
+blocking_issues:
+- 无 conf 字段，需在融合阶段用其他来源补置信度

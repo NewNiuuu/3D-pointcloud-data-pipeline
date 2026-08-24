@@ -1,0 +1,36 @@
+# Expert Card: CoTracker3 Offline
+# Contract: CLAUDE_CODE_PROJECT_SPEC.md §23.2
+# 核验日期: 2026-08-24
+
+expert_id: cotracker3_offline
+display_name: CoTracker3 Offline
+card_version: 0.1.0
+role: point_tracks_and_visibility
+spec_ref: SPEC §14.1 / §34 point_track_visibility
+research_tier: A1
+deployment_status: deployed_verified
+environment:
+  conda_env: nyp-3dpipe
+  entry: torch.hub.load('facebookresearch/co-tracker','cotracker3_offline')
+sources:
+  repository: https://github.com/facebookresearch/co-tracker
+license:
+  code: NOASSERTION_on_github_api
+  weights: 见仓库 LICENSE
+  note: SPEC §14.1 记为 noncommercial license。本项目已确认为非商用学术用途（UAVScenes CC BY-NC-SA、VGGT-Ω FAIR NC），故相容。GitHub
+    API 返回 NOASSERTION，正式启用前应人工确认 LICENSE 全文
+  training_allowed: unresolved_pending_license_text_review
+  verified_at: '2026-08-24'
+io_contract:
+  outputs:
+    tracks: (B,T,N,2) float32 像素坐标
+    visibility: (B,T,N) bool
+measured:
+  tested_on: UAVScenes AMtown01 8 帧 @512x428, grid_size=10
+  peak_vram_gb: 0.86
+  tracks_shape: (1,8,100,2)
+  visible_ratio: 0.971
+uav_validation_status: not_started
+production_ready: false
+blocking_issues:
+- 许可全文未人工审查（GitHub API 报 NOASSERTION）

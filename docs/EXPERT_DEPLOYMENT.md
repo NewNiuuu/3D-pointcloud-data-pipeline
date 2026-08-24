@@ -15,7 +15,9 @@
 | **DINOv2 Base** | 跨视角外观特征 | Apache-2.0 | ✅ 已部署，真实推理通过 | 0.37 GB |
 | **OneFormer ADE20K** | 天空/水面/stuff 语义 | MIT | ⚠️ 可运行但权重加载异常 | 4.54 GB |
 | **Florence-2 Large** | 属性/描述候选 | MIT | ❌ transformers 版本不兼容 | — |
-| **MoGe-3 ViT-L** | **首选**独立几何交叉校验 | MIT | ❌ 依赖冲突，需独立环境 | — |
+| **MoGe-3 ViT-L** | **首选**独立几何交叉校验 | MIT | ✅ 已部署（独立环境 `nyp-moge`） | 2.87 GB |
+| **DA3Metric-Large** | 单目 metric 深度 + sky 掩码 | Apache-2.0 | ✅ 已部署；**无 conf/相机参数** | 2.91 GB |
+| **CoTracker3** | 点轨迹与可见性 | 非商用（待审全文） | ✅ 已部署 | 0.86 GB |
 | VGGT-Ω | **点云主路径** | FAIR NC | 代码就绪，**权重待批**（M-007） | 6.53 GB |
 
 许可全部核验完毕，**无一构成阻塞** —— 均与本项目的非商用学术定位相容。
@@ -34,11 +36,11 @@ extrinsics (N,3,4)        intrinsics (N,3,3)
 is_metric {}              scale_factor None       sky None
 ```
 
-**关键判定：DA3-LARGE-1.1 输出的是 `relative` 深度**，不是 metric —— `is_metric` 为空、`scale_factor` 为 None、depth 落在 0.57~1.02。按铁律 8，**不得用它直接产出绝对米制目标**。若需 metric 第二意见，应改用 `DA3METRIC-LARGE`（同为 Apache-2.0，尚未部署）。
+**关键判定：DA3-LARGE-1.1 输出的是 `relative` 深度**，不是 metric —— `is_metric` 为空、`scale_factor` 为 None、depth 落在 0.57~1.02。按铁律 8，**不得用它直接产出绝对米制目标**。若需 metric 第二意见，应改用 `DA3METRIC-LARGE`（同为 Apache-2.0，**已部署**，见下）。
 
 **Grounding DINO** 在航拍图上检出 building / road 等。SPEC §14.1 的强制要求已记入专家卡：detector 的 box/class 置信度与 SAM 的 mask 置信度**必须分别保存**，且**不得把框内像素整体提升到 3D**。
 
-## 有问题的三个
+## 有问题的两个
 
 ### OneFormer —— 可运行，但权重加载不完整
 
@@ -59,9 +61,9 @@ model.pixel_level_module.encoder.swin.layernorm.bias     MISSING
 
 不建议为它单独降级主环境的 transformers —— 那会影响已验证通过的其他四个模型。合理做法是等官方适配，或为它单独建环境。它的角色（属性/描述候选）不在首批三个任务的关键路径上。
 
-### MoGe-3 —— 硬依赖冲突，必须独立环境
+## MoGe-3 —— 曾因依赖冲突受阻，已用独立环境解决
 
-这是几何专家接入顺序里的**首选**（SPEC §34 `primary_geometry_cross_check`），但存在不可调和的冲突：
+冲突是真实的且不可调和：
 
 | 包 | numpy 要求 |
 |---|---|
@@ -69,11 +71,34 @@ model.pixel_level_module.encoder.swin.layernorm.bias     MISSING
 | VGGT-Ω | `numpy<2` |
 | DA3 | `numpy<2` |
 
-外加需要 `flex-gemm`（指定 commit 的 CUDA 扩展）与 `utils3d_moge` 专用 fork（不是 PyPI 上的 `utils3d`）。
+外加需要 `flex-gemm`（指定 commit 的 CUDA 扩展）与 `utils3d_moge` 专用 fork。
 
-**解决方案：为 MoGe 建独立 conda 环境，通过文件交换输出。** 这与它的角色天然相容 —— MoGe 是关键帧上的**离线**几何交叉校验，本就不需要与 VGGT-Ω 同进程。SPEC §14.12 要求的 SE(3)/Sim(3) 对齐与残差计算在主环境完成，输入是 MoGe 导出的深度/法向文件。
+**解决方案（用户已批准）：独立 conda 环境 `nyp-moge`，通过文件交换输出。** 这与它的角色天然相容 —— MoGe 是关键帧上的**离线**几何交叉校验，本就不需要与 VGGT-Ω 同进程。SPEC §14.12 要求的 SE(3)/Sim(3) 对齐与残差计算在主环境完成，输入是 MoGe 导出的深度/法向文件。
 
-许可方面无障碍：MIT，SPEC §14.2 要求的 "after weight-license confirmation" 已完成。
+实测通过（峰值 2.87 GB）。输出：
+
+```
+points (H,W,3)   depth (H,W)   normal (H,W,3)   mask (H,W) bool   intrinsics (3,3) 归一化
+```
+
+`normal` 是**独立法向**，不是深度微分所得 —— 满足 SPEC §14.14「至少一路法向应来自独立法向估计器」的要求。
+
+## 尺度：三个模型互不一致，且都对不上 LiDAR
+
+同一帧 UAVScenes 图像：
+
+| 来源 | 深度范围 |
+|---|---|
+| DA3-LARGE-1.1 | 0.572 – 1.015（归一化） |
+| DA3Metric-Large | 6.970 – 23.782 m，中位 13.297 |
+| MoGe-3 ViT-L | 16.744 – 22.959 m |
+| **LiDAR 真值** | 31.09 – 38.02 m，中位 33.13（射线距离） |
+
+这是 SPEC §14.13「多专家不得投票产生真值」的现实例证 —— 取平均或多数决只会得到一个同样错的数。
+
+**但必须说明这个对比本身不严谨**：LiDAR 给的是射线距离，模型给的是垂直深度；两者传感器原点与视场均不同。严格验证需要相机-LiDAR 外参做投影，而 `calibration_results.py` **不在 interval=5 档案中**（只在完整版）。
+
+因此：所有模型的 `domain_calibrated` 一律保持 `false`，在完成投影验证前**不得产出绝对米制目标**（SPEC §14.11）。
 
 ## 尚未部署
 
@@ -81,10 +106,8 @@ model.pixel_level_module.encoder.swin.layernorm.bias     MISSING
 |---|---|---|
 | SEA-RAFT | 光流与动态证据 | 权重不在 HF，需从官方渠道单独获取 |
 | CABiNet | UAV 障碍语义 | 同上 |
-| DSINE | 独立法向 | SPEC §14.2 标注为 license-gated，需先审查 |
-| CoTracker3 | 点轨迹与可见性 | 非商用许可 —— 与本项目定位相容，可部署 |
+| DSINE | 独立法向 | SPEC §14.2 标注 license-gated，需先审查。**优先级已下降** —— MoGe-3 已提供独立法向 |
 | PowerLine-MTYOLO | 电线专项 | 领域专项，非首批必需 |
-| DA3METRIC-LARGE | metric 深度第二意见 | Apache-2.0，建议补充部署 |
 
 ## 环境事实（供复现）
 
@@ -94,7 +117,9 @@ HF_HOME:   /home/aiscuser/nyp/model_cache
 调用:      PYTHONNOUSERSITE=1 /home/aiscuser/miniconda3/envs/nyp-3dpipe/bin/python
 ```
 
-已下载权重约 **11.2 GB**（DA3 1.64 + MoGe 1.48 + SAM2.1 0.65 + GDINO 1.87 + DINOv2 0.69 + Florence-2 3.12 + OneFormer 1.83）。
+已下载权重约 **13 GB**（DA3-Large-1.1 1.64 + DA3Metric-Large + MoGe 1.48 + SAM2.1 0.65 + GDINO 1.87 + DINOv2 0.69 + Florence-2 3.12 + OneFormer 1.83 + CoTracker3 0.10）。
+
+两个 conda 环境：`nyp-3dpipe`（主，numpy<2）与 `nyp-moge`（MoGe 专用，numpy>=2）。
 
 **安装过程中的两个反复踩到的坑**：
 
