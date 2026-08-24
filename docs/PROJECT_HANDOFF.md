@@ -961,6 +961,31 @@ pseudo_depth
 
 - 本项目与同级 `3D-GRPO`（SpatialLM + GRPO 训练）的关系：是完全独立的管线，还是本 Pipeline 需要为其供给训练数据。该问题不阻塞 Layer 1，但会影响 Layer 4 的 adapter 优先级。
 
+### 19.3 UAVScenes 获取与许可决策（2026-08-24）
+
+数据已获取，Layer 1 的 G0 门禁通过（`registry/datasets/uavscenes/`）。
+
+**获取路径修正**：原判断"UAVScenes 需许可申请、是唯一硬阻塞项"**不成立**。官方提供 HuggingFace 镜像 `sijieaaa/UAVScenes`，非 gated、非 private，**无需任何 token**，已下载 35 GB（interval=5）。用户提供的 SharePoint 链接为浏览器登录态 URL，服务器访问返回 403，未采用。
+
+**[用户已确认] 许可政策**：UAVScenes 与其上游 MARS-LVIG 均为 **CC BY-NC-SA 4.0，仅限学术用途**。用户决定接受该约束，按学术研究推进。由此产生的强制义务：
+
+- 本项目生成的 3D metadata、衍生点云与任务标注按**演绎作品**处理，发布时采用 CC BY-NC-SA 4.0；
+- 署名 MARS-LVIG 与 UAVScenes；
+- 训练所得权重不得商业发布；
+- 未来若引入许可不兼容的数据集，必须分区发布，不得合并为单一 SA 作品（G6 复核）。
+
+注意：HuggingFace 仓库元数据标签为 `cc-by-sa-4.0`，**遗漏了 NonCommercial**。以 GitHub LICENSE 文件为准，不得以 HF 标签作为商用依据。
+
+**核验到的数据事实**（详见 `registry/datasets/uavscenes/dataset_card.yaml`）：
+
+- 20 个 run，归属 **4 个 split group**：AMtown、AMvalley、HKairport、HKisland。HKairport 与 HKisland 各含 base / `_GNSS` / `_GNSS_Evening` 变体，**同 location 的全部 run 必须绑定同一 split**。
+- 每个 run 含 `rtk_positions_raw.csv`（lat/lon/alt + UTM），**RTK 尺度锚点确认存在**，满足首版强制 metric 政策。
+- 图像 2448×2048，`sampleinfos_interpolated.json` 提供 `T4x4` 位姿与 `P3x3` 内参；**位姿覆盖 interval=1 全部帧，密度是已发布图像的 5 倍**。
+- LiDAR 为逐帧 ASCII XYZ 文本，无 intensity/ring/time；图像-点云配对已由官方完成（文件名含双时间戳）。
+- interval=5 实际含 24126 帧；官方称的 120k 标注对对应 interval=1。
+
+**新增风险**（已录入 dataset card）：R-001 降采样影响帧间重叠与重建质量；R-005 仅 4 个独立切分单元、泛化评测统计效力有限；R-006 ASCII 点云解析开销大；R-007 畸变系数抽样全为 0，含义待全量核验。
+
 ## Next Agent Instructions
 
 接手后按以下顺序开始：

@@ -1,0 +1,88 @@
+# UAVScenes License Review
+# Contract: CLAUDE_CODE_PROJECT_SPEC.md §9 / Skill: dataset-registry-manager (§23.1)
+# Gate: G0
+# 核验日期：2026-08-24
+
+dataset_id: uavscenes
+review_version: 0.1.0
+reviewed_at: "2026-08-24"
+gate: G0
+status: pass_with_constraints
+
+license_chain:
+  - level: dataset
+    name: UAVScenes
+    identifier: CC-BY-NC-SA-4.0
+    source_of_truth: https://github.com/sijieaaa/UAVScenes/blob/main/LICENSE
+    stated_scope: "This work is available under a Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License and is meant for academic use only."
+  - level: upstream_data
+    name: MARS-LVIG (HKU MARS Lab)
+    identifier: CC-BY-NC-SA-4.0
+    source_of_truth: https://mars.hku.hk/dataset.html
+    stated_scope: "meant for academic use only. If you wish to use the dataset for commercial purposes, please get in touch with us."
+    note: >
+      UAVScenes 的图像/LiDAR/位姿源自 MARS-LVIG，语义标注为 UAVScenes 新增。
+      两层许可一致，无冲突；约束沿链条传递，取最严者。
+
+effective_terms:
+  commercial_training: false
+  commercial_redistribution: false
+  academic_research: true
+  derivative_works_allowed: true
+  derivative_license_obligation: CC-BY-NC-SA-4.0   # ShareAlike
+  attribution_required: true
+  attribution_targets: [UAVScenes, MARS-LVIG]
+  model_weight_commercial_release: false
+
+metadata_discrepancy:
+  location: https://huggingface.co/datasets/sijieaaa/UAVScenes
+  hf_metadata_tag: cc-by-sa-4.0
+  authoritative_value: CC-BY-NC-SA-4.0
+  resolution: >
+    HF 仓库 YAML 元数据标签遗漏 NonCommercial，但同页 README 正文仍写明
+    CC BY-NC-SA 4.0 与 academic use only。以 GitHub LICENSE 文件为准。
+  action: 不得以 HF 标签作为商用依据。若未来需要法律确定性，向作者开 issue 确认。
+
+impact_on_project:
+  - scope: 生成的 3D metadata / 衍生点云 / 任务标注
+    assessment: 按演绎作品（adapted material）处理
+    obligation: 发布时须采用 CC BY-NC-SA 4.0 并署名 MARS-LVIG 与 UAVScenes
+  - scope: 训练所得模型权重
+    assessment: 基于 NC 数据训练
+    obligation: 不得商业发布；学术发布须声明数据来源与许可
+  - scope: benchmark 公开发布
+    assessment: 允许
+    obligation: 同上 NC-SA 与署名要求
+  - scope: 混合多数据集发布
+    assessment: 风险点
+    obligation: >
+      若未来引入许可不兼容的数据集（如仅限研究、禁止再分发、或与 SA 冲突的条款），
+      必须按数据集分区发布，不得合并为单一 SA 作品。由 G6 复核。
+
+user_decision:
+  date: "2026-08-24"
+  decided_by: user
+  decision: accept_nc_sa_academic_use
+  rationale: 项目定位为学术研究；NC-SA 约束可接受。
+  recorded_in: PROJECT_HANDOFF.md §19.3
+
+open_items:
+  - id: L-001
+    description: 未向作者书面确认 HF 元数据标签与 LICENSE 文件不一致的官方口径。
+    severity: low
+    blocking: false
+    action: 如需法律确定性，在 GitHub 开 issue 确认。
+  - id: L-002
+    description: >
+      ShareAlike 对"生成的任务标注"是否构成演绎作品，在不同司法辖区可能有不同解释。
+      当前按最严解释（构成演绎作品）执行。
+    severity: low
+    blocking: false
+    action: 发布前如涉及机构法务，提交复核。
+
+verified_sources:
+  - https://github.com/sijieaaa/UAVScenes
+  - https://github.com/sijieaaa/UAVScenes/blob/main/LICENSE
+  - https://mars.hku.hk/dataset.html
+  - https://huggingface.co/datasets/sijieaaa/UAVScenes
+  - http://arxiv.org/abs/2507.22412

@@ -337,8 +337,8 @@ flowchart TD
 
 | 模块 | 状态 |
 |---|---|
-| 实施边界决策 | 首批数据集、metric 政策、首批任务、Qwen 部署已于 2026-08-24 确定 |
-| 数据集调研 | 已形成 22 个新增候选；**均未落盘**，UAVScenes 待许可申请与下载 |
+| 实施边界决策 | 首批数据集、metric 政策、首批任务、Qwen 部署、许可政策已于 2026-08-24 确定 |
+| 数据集调研 | 已形成 22 个新增候选；**UAVScenes 已下载并通过 G0 门禁**（35 GB，interval=5），其余未落盘 |
 | 总体架构 | 已完成设计 |
 | Metadata Schema | 已有 L0–L3 草案，尚未冻结 |
 | 2D/几何专家调研 | 已完成官方资料调研和首版组合建议，尚未实测 |
@@ -348,14 +348,24 @@ flowchart TD
 | Pipeline 代码 | 未开始 |
 | 服务器实验 | 未开始；VGGT-Ω 尚未安装，可获取性待核验 |
 
+### Layer 1 已产出
+
+```text
+registry/datasets/uavscenes/
+├── dataset_card.yaml      # SPEC §7 契约，含帧级数据契约与 7 项风险
+├── license_review.yaml    # G0 门禁：pass_with_constraints（CC BY-NC-SA 4.0）
+└── file_inventory.json    # 4 个档案 sha256、逐 run 计数、4 个 split group
+```
+
 ## 实施边界（2026-08-24 已确定）
 
 | 项 | 决定 |
 |---|---|
-| 首批数据集 | **UAVScenes** 单个（真实多视角，含 Livox 点云与 6DoF 位姿） |
-| 是否强制 metric scale | **强制**。relative / affine-invariant / pseudo 深度场景首版不具备任务资格 |
+| 首批数据集 | **UAVScenes** 单个（真实多视角，含 Livox 点云与 6DoF 位姿）。**已下载 35 GB**，20 个 run / 4 个 split group |
+| 是否强制 metric scale | **强制**。UAVScenes 每 run 带 RTK，锚点确认存在；relative / affine-invariant / pseudo 深度场景首版不具备任务资格 |
 | 首批任务 | **3D Grounding（对象级）+ metric/situated 3D VQA + Cross-view Correspondence** |
 | Qwen 版本与部署 | **暂缓**。首批只编译 prompt bundle、跑泄漏检查与 checker 复现，不调用模型 |
+| 数据许可 | **接受 CC BY-NC-SA 4.0，仅学术用途**。衍生 metadata 与任务标注按演绎作品处理，发布时沿用同一许可并署名 MARS-LVIG 与 UAVScenes |
 | 服务器调度框架 | 不绑定框架，脚本 + 文件状态机 |
 | 质量阈值 | 沿用文档建议值，待真实数据后校准；首批样本 100% 人工复核 |
 
@@ -364,9 +374,10 @@ flowchart TD
 ### 环境现实约束
 
 - 本地 `data/` 只有 QA 标注 JSON，**无图像/视频/点云**，且属飞书已有清单，不能作为本 Pipeline 的重建输入。
-- 22 个新增候选均未落盘，**UAVScenes 的许可申请与下载是当前关键路径**。
+- UAVScenes 已下载至 `data_raw/UAVScenes`（**HF 镜像开放，无需 token**）；其余 21 个候选未落盘。
+- HF 镜像仅含 **interval=5**（1/5 帧率）。降采样可能降低帧间重叠，影响 VGGT-Ω 重建质量，需实测；不足则改取 interval=1。
 - VGGT-Ω 尚未安装，其可获取性需在 Layer 2 开工前核验。
-- 需用户手动提供的凭证与材料统一登记在 `docs/MANUAL_INPUTS.md`。
+- 需用户手动提供的凭证与材料统一登记在 `docs/MANUAL_INPUTS.md`（当前仅剩飞书导出一项待办）。
 
 ### 仍待确认
 

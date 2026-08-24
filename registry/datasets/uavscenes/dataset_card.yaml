@@ -1,0 +1,189 @@
+# UAVScenes Dataset Card
+# Contract: CLAUDE_CODE_PROJECT_SPEC.md §7
+# 事实核验：2026-08-24（GitHub README/LICENSE、HF API、MARS-LVIG 官网、arXiv）
+
+dataset_id: uavscenes
+display_name: UAVScenes
+card_version: 0.1.0
+dataset_version: "iccv2025_camera_ready"   # 未见官方语义化版本号；以 camera-ready 快照标识
+source_type: real
+
+phase_role: phase_1_primary   # 2026-08-24 用户确认为首批唯一数据集
+
+official_sources:
+  project_url: https://github.com/sijieaaa/UAVScenes
+  repository_url: https://github.com/sijieaaa/UAVScenes
+  paper_url: http://arxiv.org/abs/2507.22412
+  conference_url: https://iccv.thecvf.com/virtual/2025/poster/2587
+  download_url:
+    huggingface: https://huggingface.co/datasets/sijieaaa/UAVScenes   # interval=5 only; 开放，无需 token
+    onedrive: "https://entuedu-my.sharepoint.com/:f:/g/personal/wang1679_e_ntu_edu_sg/EgY6DU5GBchIiAIa-eQZmEAB0vJx3khCPHbFW3LnR77RFw?e=26GaSc"
+    google_drive: https://drive.google.com/drive/folders/1HSJWc5qmIKLdpaS8w8pqrWch4F9MHIeN?usp=sharing
+    baidu: "https://pan.baidu.com/s/13CgnxRFqevQ8Fa1Y3dkM0A?pwd=1679"   # interval=5 only
+  used_source: huggingface
+
+upstream_dataset:
+  name: MARS-LVIG
+  url: https://mars.hku.hk/dataset.html
+  relationship: >
+    UAVScenes 在 MARS-LVIG 基础上增加了人工语义标注（图像与点云）与 6-DoF 位姿。
+    上游许可同为 CC BY-NC-SA 4.0，约束传递适用。
+  note: MARS-LVIG 本身也在本项目 A 级候选清单中，不得重复计为两个独立数据集。
+
+license:
+  identifier: CC-BY-NC-SA-4.0
+  url: https://creativecommons.org/licenses/by-nc-sa/4.0/
+  stated_scope: "meant for academic use only"
+  commercial_training: false          # NC 条款禁止
+  derivative_point_cloud_redistribution: conditional_sharealike
+  model_weight_release: false         # 基于 NC 数据训练的权重不得商用发布
+  attribution_required: true
+  verified_at: "2026-08-24"
+  verified_sources:
+    - https://github.com/sijieaaa/UAVScenes/blob/main/LICENSE
+    - https://mars.hku.hk/dataset.html
+  discrepancy:
+    huggingface_metadata_says: cc-by-sa-4.0
+    authoritative: CC-BY-NC-SA-4.0
+    note: >
+      HF 仓库元数据标签遗漏 NC，但该页 README 正文仍写明 CC BY-NC-SA 4.0 与 academic use only。
+      以 GitHub LICENSE 为准。引用 HF 标签作为商用依据属于错误。
+  user_decision:
+    date: "2026-08-24"
+    decision: accept_nc_sa_academic_use
+    implication: >
+      本项目产出的 3D metadata、衍生点云与任务标注按演绎作品处理，
+      发布时采用 CC BY-NC-SA 4.0 并署名 MARS-LVIG 与 UAVScenes。
+
+modalities:
+  rgb: true                 # Hikvision camera, 2448x2048
+  video: false              # 按时间戳命名的序列帧，非封装视频
+  lidar: true               # Livox Avia；每帧独立 txt，仅 XYZ 三列，无 intensity
+  depth: false              # 无原生深度图；深度由 LiDAR 投影或重建产生
+  camera_intrinsics: true   # sampleinfos_interpolated.json 的 P3x3
+  camera_extrinsics: true   # sampleinfos_interpolated.json 的 T4x4
+  imu: false                # interval5 重打包中未见 IMU 流（上游 MARS-LVIG 有）
+  gps_rtk: true             # 每 run 带 rtk_positions_raw.csv（lat/lon/alt + UTM easting/northing）
+
+frame_contract:              # 2026-08-24 通过 zip 中央目录与抽样解析核验
+  image_naming: "<timestamp>.jpg"                       # 例 1658137057.641204937.jpg
+  lidar_naming: "image<img_ts>_lidar<lidar_ts>.txt"     # 图像-点云配对已由官方完成
+  image_lidar_time_offset_s: ~0.016                     # 抽样观测，非官方声明
+  lidar_format: ascii_xyz                               # 三列浮点，无 intensity/ring/time
+  intrinsics:
+    fx_fy: 1469.4898681640625
+    cx: 1174.0027077275518
+    cy: 1049.91204868583
+    width: 2448
+    height: 2048
+    distortion: [K1, K2, K3, P1, P2]
+    distortion_values_sampled: all_zero                 # 抽样首帧全为 0，是否全库如此待全量核验
+  pose_field: T4x4                                      # 4x4；world_from_camera 抑或 camera_from_world 待核验
+  pose_coverage: >
+    sampleinfos_interpolated.json 覆盖 interval=1 全部帧（AMtown01 为 12944 条），
+    而 interval=5 只发布其中 1/5 的图像。位姿密度高于图像密度。
+
+geometry:
+  depth_source: direct_lidar
+  metric_scale: true
+  scale_source: rtk_gnss_and_lidar        # 已核验 RTK 存在，满足强制 metric 政策
+  scale_uncertainty_m: UNRESOLVED         # 官方未声明；需从 RTK 与重建残差估计
+  coordinate_system: UNRESOLVED           # T4x4 平移量级约 1e2 m，疑为局部度量系；约定待核验
+  rtk_fields: [scenename, headerstamp, lat, lon, alt, easting, northing]
+  reconstruction_reference:
+    tool: "DJI Terra"
+    products: [terra_ply_mesh_blocks, cloud_merged.ply, Mesh.ply]
+    note: 作为独立几何参考，不作为 VGGT-Ω 的替代主路径
+
+annotations:
+  semantic_2d: true          # 人工标注（X-AnyLabeling），png
+  instance_2d: UNRESOLVED
+  semantic_3d: true          # 人工标注（CloudCompare），txt 逐点标签
+  instance_3d: UNRESOLVED
+  tracking: false
+  labeled_pairs_official: 120000     # 官方口径，对应 interval=1
+  frames_in_interval5: 24126         # 实测 interval5_CAM_LIDAR 中的 jpg 数
+  color_id_mapping: cmap.py
+
+scenes:
+  locations: 4
+  location_names: [AMtown, AMvalley, HKairport, HKisland]
+  runs_total: 20
+  run_list_ref: file_inventory.json    # 完整 run 清单与逐档案计数
+  variants_note: >
+    HKairport 与 HKisland 各含 base / _GNSS / _GNSS_Evening 三类变体。
+    _Evening 为同地点不同时段，可支持跨时相研究。
+  split_groups: 4                      # AMtown / AMvalley / HKairport / HKisland
+  split_rule: >
+    同一 location 的全部 run（含 _GNSS 与 _Evening 变体）MUST 绑定同一 split
+    （SPEC 铁律 11）。禁止逐帧随机切分。
+    注意：仅 4 个独立切分单元，跨场景泛化评测的统计效力有限。
+  geographic_note: AMtown/AMvalley 位于亚美尼亚，HK* 位于香港（据 RTK 经纬度抽样）
+
+variants:
+  interval_1:
+    description: 全帧率完整版
+    available_from: [onedrive, google_drive]
+    status: not_downloaded
+  interval_5:
+    description: 关键帧子集，约 1/5 体量
+    available_from: [huggingface, onedrive, google_drive, baidu]
+    status: downloaded          # 2026-08-24 完成，35 GB 落盘
+    files:
+      - {name: interval5_CAM_LIDAR.zip, size_gb: 28.68, content: "图像 + LiDAR + 6DoF 位姿 + 标定"}
+      - {name: interval5_CAM_label.zip, size_gb: 1.49, content: 图像语义标注}
+      - {name: interval5_LIDAR_label.zip, size_gb: 0.11, content: 点云语义标注}
+      - {name: terra_3dmap_pointcloud_mesh.zip, size_gb: 6.78, content: 3D 网格/点云地图}
+    total_size_gb: 37.06
+
+ingestion:
+  adapter_status: not_started
+  sample_download_status: complete       # 2026-08-24 自 HF 下载 interval=5 全量，35 GB
+  local_path: /home/aiscuser/nyp/data_raw/UAVScenes
+  verified_file_inventory: file_inventory.json   # 含 4 个档案的 sha256 与逐 run 计数
+  checksums: recorded_in_file_inventory
+  archives_extracted: false              # 仍为 zip；按需流式读取或分场景解压
+  license_gate: license_review.yaml      # G0 = pass_with_constraints
+
+risks:
+  - id: R-005
+    severity: medium
+    description: >
+      仅 4 个独立 split group（AMtown/AMvalley/HKairport/HKisland）。
+      场景级切分后可用于跨场景泛化评测的独立单元很少，统计效力有限。
+    mitigation: 首批只做单场景闭环；泛化评测推迟到引入第二个数据集之后。
+  - id: R-006
+    severity: medium
+    description: >
+      LiDAR 为 ASCII XYZ 文本，24k 帧解析开销大且无 intensity/ring/time 字段，
+      限制了按回波强度或时序去噪的手段。
+    mitigation: adapter 阶段一次性转为二进制（npy/pcd）并缓存；记录转换 provenance。
+  - id: R-007
+    severity: low
+    description: >
+      抽样首帧的畸变系数 K1..P2 全为 0，可能表示图像已去畸变，也可能表示未建模。
+      两者对投影精度含义不同。
+    mitigation: 全量核验畸变字段分布；必要时用 LiDAR 重投影残差反证。
+
+  - id: R-001
+    severity: medium
+    description: >
+      HF 镜像仅含 interval=5（1/5 帧率）。降采样会降低帧间重叠，
+      可能影响 VGGT-Ω 的多视角重建质量与位姿收敛。
+    mitigation: 小样本实测重叠率与重建质量；不足则改取 interval=1（OneDrive/GDrive）。
+  - id: R-002
+    severity: high
+    description: >
+      NC + ShareAlike 约束传递至本项目全部衍生产物，且沿 MARS-LVIG 链条叠加。
+      发布前须复核演绎作品的许可标注与署名。
+    mitigation: 已记录用户决策；发布阶段由 dataset-quality-monitor 在 G6 复核。
+  - id: R-003
+    severity: medium
+    description: >
+      官方 baseline code "under preparing"，无官方 train/test split。
+      需自建场景级切分，且不得与他人结果直接比较。
+    mitigation: 在 registry/selection 中记录自定义 split 并版本化。
+  - id: R-004
+    severity: low
+    description: 未见官方语义化版本号，未来若数据更新难以区分版本。
+    mitigation: 记录下载日期、HF commit sha 与文件 sha256 作为版本标识。

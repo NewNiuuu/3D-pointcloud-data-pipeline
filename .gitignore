@@ -1,0 +1,6 @@
+# 原始数据与大文件不进仓库（体量大且受 CC BY-NC-SA 4.0 约束，不得再分发）
+data_raw/
+*.zip
+*.ply
+__pycache__/
+*.pyc

@@ -1,0 +1,219 @@
+{
+  "dataset_id": "uavscenes",
+  "variant": "interval5",
+  "generated_at": "2026-08-24",
+  "source": "huggingface:sijieaaa/UAVScenes",
+  "local_path": "/home/aiscuser/nyp/data_raw/UAVScenes",
+  "archives": [
+    {
+      "name": "interval5_CAM_LIDAR.zip",
+      "size_bytes": 28682115865,
+      "sha256": "c964fca708ecd6a79e0b05455b5124d543b05ea0929bd895f45fba08db9a36d9",
+      "entries": 48332,
+      "runs": 20,
+      "extensions": {
+        ".jpg": 24126,
+        ".txt": 24126,
+        ".png": 40,
+        ".csv": 20,
+        ".json": 20
+      },
+      "central_directory_readable": true
+    },
+    {
+      "name": "interval5_CAM_label.zip",
+      "size_bytes": 1488319248,
+      "sha256": "461909f53b45933824597226cc5a7de70c04793c38f1db73056eabbf525c9fd5",
+      "entries": 48252,
+      "runs": 20,
+      "extensions": {
+        ".png": 48252
+      },
+      "central_directory_readable": true
+    },
+    {
+      "name": "interval5_LIDAR_label.zip",
+      "size_bytes": 105289464,
+      "sha256": "14e5fbc5d775887a6ac4ca135890a9903327c01a7f90901a2b4b3a0bd9239942",
+      "entries": 48252,
+      "runs": 20,
+      "extensions": {
+        ".txt": 48252
+      },
+      "central_directory_readable": true
+    },
+    {
+      "name": "terra_3dmap_pointcloud_mesh.zip",
+      "size_bytes": 6779103543,
+      "sha256": "a41e29a8922c2c5aaee995eb7e43be4b305bf277c223ff8a5e95b6385eb2a643",
+      "entries": 322,
+      "runs": 8,
+      "extensions": {
+        ".jpg": 275,
+        ".ply": 28,
+        ".frag": 11,
+        ".xml": 8
+      },
+      "central_directory_readable": true
+    }
+  ],
+  "runs": {
+    "AMtown": {
+      "terra_3dmap_pointcloud_mesh": 130
+    },
+    "AMtown01": {
+      "CAM_LIDAR": 5182,
+      "CAM_label": 5178,
+      "LIDAR_label": 5178
+    },
+    "AMtown02": {
+      "CAM_LIDAR": 2764,
+      "CAM_label": 2760,
+      "LIDAR_label": 2760
+    },
+    "AMtown03": {
+      "CAM_LIDAR": 2244,
+      "CAM_label": 2240,
+      "LIDAR_label": 2240
+    },
+    "AMvalley": {
+      "terra_3dmap_pointcloud_mesh": 18
+    },
+    "AMvalley01": {
+      "CAM_LIDAR": 4524,
+      "CAM_label": 4520,
+      "LIDAR_label": 4520
+    },
+    "AMvalley02": {
+      "CAM_LIDAR": 2536,
+      "CAM_label": 2532,
+      "LIDAR_label": 2532
+    },
+    "AMvalley03": {
+      "CAM_LIDAR": 1926,
+      "CAM_label": 1922,
+      "LIDAR_label": 1922
+    },
+    "HKairport": {
+      "terra_3dmap_pointcloud_mesh": 46
+    },
+    "HKairport01": {
+      "CAM_LIDAR": 2884,
+      "CAM_label": 2880,
+      "LIDAR_label": 2880
+    },
+    "HKairport02": {
+      "CAM_LIDAR": 1576,
+      "CAM_label": 1572,
+      "LIDAR_label": 1572
+    },
+    "HKairport03": {
+      "CAM_LIDAR": 1214,
+      "CAM_label": 1210,
+      "LIDAR_label": 1210
+    },
+    "HKairport_GNSS": {
+      "terra_3dmap_pointcloud_mesh": 26
+    },
+    "HKairport_GNSS01": {
+      "CAM_LIDAR": 2716,
+      "CAM_label": 2712,
+      "LIDAR_label": 2712
+    },
+    "HKairport_GNSS02": {
+      "CAM_LIDAR": 1498,
+      "CAM_label": 1494,
+      "LIDAR_label": 1494
+    },
+    "HKairport_GNSS03": {
+      "CAM_LIDAR": 1264,
+      "CAM_label": 1260,
+      "LIDAR_label": 1260
+    },
+    "HKairport_GNSS_Evening": {
+      "CAM_LIDAR": 2834,
+      "CAM_label": 2830,
+      "LIDAR_label": 2830,
+      "terra_3dmap_pointcloud_mesh": 34
+    },
+    "HKisland": {
+      "terra_3dmap_pointcloud_mesh": 22
+    },
+    "HKisland01": {
+      "CAM_LIDAR": 2638,
+      "CAM_label": 2634,
+      "LIDAR_label": 2634
+    },
+    "HKisland02": {
+      "CAM_LIDAR": 1554,
+      "CAM_label": 1550,
+      "LIDAR_label": 1550
+    },
+    "HKisland03": {
+      "CAM_LIDAR": 1202,
+      "CAM_label": 1198,
+      "LIDAR_label": 1198
+    },
+    "HKisland_GNSS": {
+      "terra_3dmap_pointcloud_mesh": 24
+    },
+    "HKisland_GNSS01": {
+      "CAM_LIDAR": 2716,
+      "CAM_label": 2712,
+      "LIDAR_label": 2712
+    },
+    "HKisland_GNSS02": {
+      "CAM_LIDAR": 1524,
+      "CAM_label": 1520,
+      "LIDAR_label": 1520
+    },
+    "HKisland_GNSS03": {
+      "CAM_LIDAR": 1072,
+      "CAM_label": 1068,
+      "LIDAR_label": 1068
+    },
+    "HKisland_GNSS_Evening": {
+      "CAM_LIDAR": 4464,
+      "CAM_label": 4460,
+      "LIDAR_label": 4460,
+      "terra_3dmap_pointcloud_mesh": 22
+    }
+  },
+  "split_groups": {
+    "AMtown": [
+      "AMtown",
+      "AMtown01",
+      "AMtown02",
+      "AMtown03"
+    ],
+    "AMvalley": [
+      "AMvalley",
+      "AMvalley01",
+      "AMvalley02",
+      "AMvalley03"
+    ],
+    "HKairport": [
+      "HKairport",
+      "HKairport01",
+      "HKairport02",
+      "HKairport03",
+      "HKairport_GNSS",
+      "HKairport_GNSS01",
+      "HKairport_GNSS02",
+      "HKairport_GNSS03",
+      "HKairport_GNSS_Evening"
+    ],
+    "HKisland": [
+      "HKisland",
+      "HKisland01",
+      "HKisland02",
+      "HKisland03",
+      "HKisland_GNSS",
+      "HKisland_GNSS01",
+      "HKisland_GNSS02",
+      "HKisland_GNSS03",
+      "HKisland_GNSS_Evening"
+    ]
+  },
+  "split_rule": "同一 split_group 内所有 run（含 _GNSS / _Evening 变体）MUST 绑定同一 split；禁止逐帧随机切分"
+}
