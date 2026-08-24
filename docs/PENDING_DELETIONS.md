@@ -23,12 +23,14 @@
 |---|---|---:|---|---|
 | X-001 | `/home/aiscuser/nyp/scenes/uavscenes_AMtown01_0003` | ~88 MB | **孤儿场景目录**。`build_scenes.py` 的 `--limit` 曾在 `yield` 之后才 `break`，而帧文件在 `yield` 之前就已解出，导致多解一个场景且未写 `scene_manifest.json`。该 bug 已用 `itertools.islice` 修复（见 CHANGELOG `[修正]`），此目录是修复前的残留，无清单、不被任何流程引用 | 2026-08-24 |
 | X-002 | `/home/aiscuser/nyp/scenes/uavscenes_AMtown01_0000`<br>`/home/aiscuser/nyp/scenes/uavscenes_AMtown01_0001`<br>`/home/aiscuser/nyp/scenes/uavscenes_AMtown01_0002` | ~257 MB | **标注文件约半数错误**。adapter v0.1.0 用后缀匹配定位标注，而两个标注档案各含 `*_id`（类别 ID）与 `*_color`（RGB 可视化）两份**同名**平行数据，遍历无序 `set` 导致随机命中其一。已在 v0.2.0 改为显式路径并加 5 项测试锁死。这三个场景的 `labels_cam/` 与 `labels_lidar/` 内容不可信，**清单本身正确但标注文件需重新生成** | 2026-08-24 |
+| X-003 | `/home/aiscuser/nyp/.venv` | ~60 MB | **废弃的 venv**。最初用 `python -m venv --system-site-packages` 建的项目环境，用户随后要求改用 conda。已被 `nyp-3dpipe` conda 环境完全取代，无任何脚本或文档引用它 | 2026-08-24 |
 
 **X-002 删除后的重建命令**（删除后需重跑，否则 `scenes/` 为空）：
 
 ```bash
 cd /home/aiscuser/nyp/3D-data-pipeline
-/opt/conda/envs/ptca/bin/python scripts/build_scenes.py --run interval5_AMtown01 --limit 3
+PYTHONNOUSERSITE=1 /home/aiscuser/miniconda3/envs/nyp-3dpipe/bin/python \
+    scripts/build_scenes.py --run interval5_AMtown01 --limit 3
 ```
 
 ### 删除命令
@@ -41,10 +43,21 @@ ls /home/aiscuser/nyp/scenes/uavscenes_AMtown01_0003/scene_manifest.json 2>/dev/
   || rm -rf /home/aiscuser/nyp/scenes/uavscenes_AMtown01_0003
 ```
 
+```bash
+# X-003 废弃 venv：先确认 conda 环境可用，再删
+PYTHONNOUSERSITE=1 /home/aiscuser/miniconda3/envs/nyp-3dpipe/bin/python -c "import torch, vggt_omega; print('conda 环境正常')" \
+  && rm -rf /home/aiscuser/nyp/.venv
+```
+
 一次性清理全部待删除项（**执行前请先逐条核对上表**）：
 
 ```bash
-# 目前只有 X-001，随清单增长再补充
+rm -rf /home/aiscuser/nyp/scenes/uavscenes_AMtown01_0003 \
+       /home/aiscuser/nyp/scenes/uavscenes_AMtown01_0000 \
+       /home/aiscuser/nyp/scenes/uavscenes_AMtown01_0001 \
+       /home/aiscuser/nyp/scenes/uavscenes_AMtown01_0002 \
+       /home/aiscuser/nyp/.venv
+# 删完 X-002 后记得按上面的重建命令重跑 3 个场景
 ```
 
 ## 已删除

@@ -23,6 +23,71 @@
 
 ## 2026-08-24
 
+### `[需求]` `[修正]` 改用项目专属 conda 环境，不碰共享 base — 用户
+
+**要求**：使用模型相关依赖时不要动共享 base 环境，为本项目建隔离环境。随后进一步要求用 **conda** 而非 venv。
+
+**我的错误**：安装 VGGT-Ω 依赖时直接装进了共享的 `/opt/conda/envs/ptca`。`opencv-python-headless 5.0` 把 numpy 从 1.24.4 拉到 2.2.6，**同时违反了 VGGT-Ω 的 `numpy<2` 与 scipy 1.10.1 的约束**。
+
+**已还原**：numpy 回退 1.24.4，卸载 opencv-python-headless / einops / safetensors，`pip check` 确认 "No broken requirements found"，共享环境回到我动手前的状态。
+
+**新环境**：conda env `nyp-3dpipe`（python 3.10.20），独立安装 torch 2.8.0+cu126、torchvision 0.23.0+cu126、numpy<2、einops、safetensors、opencv-python-headless<5、pyyaml、jsonschema、pytest。141 项项目测试在新环境全过。
+
+**发现的隔离漏洞**：`~/.local/lib/python3.10/site-packages` 下有 35 个包（wandb、webdataset、ftfy…）**会渗进任何 python3.10，包括 conda 环境**。已用 `conda env config vars set PYTHONNOUSERSITE=1` 绑定，但**直接调用 python 二进制时该配置不生效**，必须显式带变量，否则隔离是假的。
+
+**新增规则 3**（`CLAUDE.md`）：禁止向共享 base 安装/升级/卸载任何包；给出项目环境调用方式、`PYTHONNOUSERSITE` 的必要性与验证命令、以及误动共享环境后的还原流程。
+
+**涉及文件**：`CLAUDE.md`、`docs/PENDING_DELETIONS.md`（X-003 废弃 venv）
+
+---
+
+### `[实现]` VGGT-Ω 部署与输出契约实测 — Agent
+
+**可获取性**：SPEC §38 记录的三个 URL 全部有效。代码 clone 成功（commit `282ec70`），**权重 `gated: manual` 需申请**。
+
+**许可**（G0 分层记录）：
+
+- 代码 **FAIR Noncommercial Research License v1**；
+- 关键条款"outputs or results 亦限于 Noncommercial Research Uses"，但**没有**"禁止用输出改进其他 AI 模型"的条款 —— 与 WorldMirror 不同，因此 **VGGT-Ω 输出可进入训练 metadata**；
+- 权重许可**未知**（需获批后才可见），按 §23.2 属硬失败，获批前不得标记 production-ready；
+- 开放问题：CC BY-NC-SA 4.0 的 ShareAlike 与 FAIR NC 的衍生条款能否同时满足，不确定。不影响研究使用，列为 G6 发布门禁的开放项。
+
+**实测输出契约**（随机权重前向，key/形状/dtype 为真）：
+
+```
+pose_enc     (B,S,9)        depth       (B,S,H,W,1)    depth_conf  (B,S,H,W)
+camera_and_register_tokens  (B,S,17,2048)
+encoding_to_camera -> extrinsics (B,S,3,4)   intrinsics (B,S,3,3)
+```
+
+模型 1.144 B 参数（fp32 约 4.58 GB）。**2 帧 @512 峰值 6.53 GB**，与官方参考（1 帧 6.02 GB）量级一致。SPEC §13 声称的输出能力**全部属实**。
+
+**两点部署实测**：核心包**不需要 `cv2`**（只有 gradio demo 的 `visual_util.py` 用）；`numpy<2` 是硬约束，opencv 5.x 会破坏它。
+
+**GPU 使用**：在占卡程序仍占 27 GB/卡（剩余 12.62 GB）的情况下跑通，未中断服务器保活，无需 release。
+
+**当前阻塞**：权重需申请，登记为 M-007。
+
+**涉及文件**：`docs/VGGT_OMEGA_DEPLOYMENT.md`（新建）、`docs/MANUAL_INPUTS.md`、`third_party/vggt-omega`（未纳入 git）
+
+---
+
+### `[实现]` 现有 VGGT-Ω 点云语料分析 — Agent
+
+下载 blob `Pointcloud-VQA/Floodnet/train/` 的 3 个 `.ply` 实测。三条结论：
+
+1. **格式**：binary PLY，逐点仅 `xyz + rgba`。**无法向、无置信度、无相机参数、无 provenance** —— 是可视化交付形态，不是 VGGT-Ω 完整输出。本 Pipeline 的 metadata 层无法直接消费：缺置信度过不了 G1/G2，缺相机参数做不了投影与跨视角关联。
+2. **尺度是 relative 而非 metric**：到原点距离中位数 ≈ 1.00，整个航拍场景跨度不足 1 单位。按铁律 8/9 禁止用于绝对米制目标。深度起伏小（`z_max/z_min ≈ 1.13`），这是航拍近垂直视角的固有特性，也意味着可供 3D 任务利用的深度信息有限。
+3. **组织与任务形态**：全部 9 个数据集约 38 万样本，每样本恰好 1 个 `.ply`（逐图像单视角反投影，非多视角融合）；题型为 `Condition_Recognition` / `Yes_No` / `Counting` / `Quality Assessment`，即**把 2D 识别题搬到点云上**，属 SPEC 铁律 5 与 HANDOFF §2.2 明确排除的形态。
+
+这不是对既有工作的否定，而是明确了本 Pipeline 要补的差距：**点云要带尺度、置信度与 provenance，任务要真正依赖三维**。UAVScenes 的多视角 + RTK 正好提供这两样。
+
+**新增风险**：航拍深度起伏小，需在 Task Spec 的 `eligibility` 中加入深度起伏下限，优先选取有高差的场景。
+
+**涉及文件**：`docs/BASELINE_POINTCLOUD_ANALYSIS.md`（新建）
+
+---
+
 ### `[实现]` vertical slice 第 7–8 步：确定性几何 + checker + 三类 Task Spec — Agent
 
 **新增 `geometry/primitives.py`**（17 个纯函数，SPEC §14.15 / 铁律 7）：点到线段/折线距离、多折线取最近、点集间最小距离、相机中心与光轴、世界系↔相机系、投影、观察者相对方位、方位角/俯仰角、高度差、质心、AABB、PCA-OBB、视锥测试、可见比例。
