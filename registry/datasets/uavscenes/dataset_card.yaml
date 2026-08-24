@@ -78,7 +78,7 @@ frame_contract:              # 2026-08-24 通过 zip 中央目录与抽样解析
     height: 2048
     distortion: [K1, K2, K3, P1, P2]
     distortion_values_sampled: all_zero                 # 抽样首帧全为 0，是否全库如此待全量核验
-  pose_field: T4x4                                      # 4x4；world_from_camera 抑或 camera_from_world 待核验
+  pose_field: T4x4                                      # 4x4 world_from_camera，已核验，见 geometry.pose_verification
   pose_coverage: >
     sampleinfos_interpolated.json 覆盖 interval=1 全部帧（AMtown01 为 12944 条），
     而 interval=5 只发布其中 1/5 的图像。位姿密度高于图像密度。
@@ -87,8 +87,19 @@ geometry:
   depth_source: direct_lidar
   metric_scale: true
   scale_source: rtk_gnss_and_lidar        # 已核验 RTK 存在，满足强制 metric 政策
-  scale_uncertainty_m: UNRESOLVED         # 官方未声明；需从 RTK 与重建残差估计
-  coordinate_system: UNRESOLVED           # T4x4 平移量级约 1e2 m，疑为局部度量系；约定待核验
+  scale_uncertainty_m: 2.0                # 绝对配准 RMS 上界；相对尺度精度优于 0.25%
+  coordinate_system: uavscenes_world_metric   # 已核验（2026-08-24）
+  pose_convention: world_from_camera          # T4x4 平移列即相机中心
+  pose_verification:
+    method: 与 RTK(UTM) 轨迹交叉验证 + Umeyama 相似变换
+    world_from_camera_corr: 0.9877
+    camera_from_world_corr: 0.2155
+    scale_factor_range: [0.997591, 1.002179]   # 4 个地点
+    max_scale_deviation_pct: 0.241
+    residual_rms_m_at_unit_scale: [0.438, 1.888]
+    residual_note: >
+      残差来自 RTK 天线-相机光心杆臂、RTK 噪声与时间同步，非尺度误差；
+      对物体间相对距离类任务无影响。HKisland_GNSS01 残差最高（1.888 m）。
   rtk_fields: [scenename, headerstamp, lat, lon, alt, easting, northing]
   reconstruction_reference:
     tool: "DJI Terra"
@@ -137,12 +148,12 @@ variants:
     total_size_gb: 37.06
 
 ingestion:
-  adapter_status: not_started
+  adapter_status: implemented            # adapters/uavscenes，21 项契约测试在真实数据上通过
   sample_download_status: complete       # 2026-08-24 自 HF 下载 interval=5 全量，35 GB
   local_path: /home/aiscuser/nyp/data_raw/UAVScenes
   verified_file_inventory: file_inventory.json   # 含 4 个档案的 sha256 与逐 run 计数
   checksums: recorded_in_file_inventory
-  archives_extracted: false              # 仍为 zip；按需流式读取或分场景解压
+  archives_extracted: per_scene          # 保持 zip，由 adapter 按场景解出到 scenes/<scene_id>/
   license_gate: license_review.yaml      # G0 = pass_with_constraints
 
 risks:

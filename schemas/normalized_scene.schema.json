@@ -1,0 +1,275 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NewNiuuu/3D-pointcloud-data-pipeline/schemas/normalized_scene.schema.json",
+  "title": "Normalized Scene Contract",
+  "description": "所有 dataset adapter 必须产出的统一场景契约。契约来源：CLAUDE_CODE_PROJECT_SPEC.md §12。SPEC 要求 'All adapters MUST emit this contract or a versioned successor.'",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "scene_id",
+    "dataset_id",
+    "dataset_version",
+    "split_group_id",
+    "source_type",
+    "frames",
+    "coordinate_frame",
+    "unit",
+    "scale",
+    "provenance"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "本契约的版本。字段增删必须提升版本，不得原地改变语义。"
+    },
+    "scene_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "场景唯一标识，在 dataset 内唯一。"
+    },
+    "dataset_id": { "type": "string", "minLength": 1 },
+    "dataset_version": { "type": "string", "minLength": 1 },
+    "split_group_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "切分组标识（地域/完整飞行/轨迹）。同组的全部场景 MUST 绑定同一 split；禁止逐帧随机切分（SPEC 铁律 11）。"
+    },
+    "source_type": { "enum": ["real", "simulated", "mixed"] },
+
+    "frames": {
+      "type": "array",
+      "minItems": 1,
+      "description": "场景内的帧序列，按时间升序。",
+      "items": { "$ref": "#/$defs/frame" }
+    },
+
+    "native_annotations": {
+      "type": "array",
+      "description": "数据集原生标注的引用。内容不内联，只存 URI 与类型。",
+      "items": { "$ref": "#/$defs/native_annotation" },
+      "default": []
+    },
+
+    "sensor_calibration": {
+      "type": "object",
+      "description": "传感器间标定。缺失时必须显式为空对象，不得省略字段。",
+      "additionalProperties": true,
+      "default": {}
+    },
+
+    "coordinate_frame": {
+      "type": "string",
+      "minLength": 1,
+      "description": "坐标系标识。未知时必须写 'unknown'，不得留空或臆造（SPEC §27 G1 硬失败：unknown coordinate frame）。"
+    },
+    "unit": { "enum": ["meter", "unknown"] },
+
+    "scale": { "$ref": "#/$defs/scale" },
+
+    "provenance": { "$ref": "#/$defs/provenance" },
+
+    "diagnostics": {
+      "type": "object",
+      "description": "adapter 阶段可计算的诊断量，供 scene-ingestion-validator 使用。",
+      "additionalProperties": true,
+      "default": {}
+    }
+  },
+
+  "$defs": {
+    "frame": {
+      "type": "object",
+      "required": ["frame_id", "timestamp_ns", "camera_id", "image_uri"],
+      "additionalProperties": false,
+      "properties": {
+        "frame_id": { "type": "string", "minLength": 1 },
+        "timestamp_ns": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "纳秒时间戳，整数以避免浮点精度损失。"
+        },
+        "camera_id": { "type": "string", "minLength": 1 },
+        "image_uri": { "type": "string", "minLength": 1 },
+        "image_sha256": {
+          "type": ["string", "null"],
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "图像内容摘要。未计算时为 null，不得填占位串。"
+        },
+        "original_size": {
+          "type": "array",
+          "prefixItems": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "integer", "minimum": 1 }
+          ],
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "[height, width]，原始图像尺寸（SPEC §14.10）。"
+        },
+        "camera": { "$ref": "#/$defs/camera" },
+        "lidar": { "$ref": "#/$defs/lidar" },
+        "native_labels": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "该帧的原生标注 URI，按类型索引。",
+          "default": {}
+        }
+      }
+    },
+
+    "camera": {
+      "type": "object",
+      "required": ["K", "coordinate_convention"],
+      "additionalProperties": false,
+      "properties": {
+        "K": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "items": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": { "type": "number" }
+          },
+          "description": "3x3 内参矩阵。"
+        },
+        "distortion_model": {
+          "enum": ["opencv", "none", "unknown"],
+          "default": "unknown"
+        },
+        "distortion": {
+          "type": "array",
+          "items": { "type": "number" },
+          "default": []
+        },
+        "T_world_from_camera": {
+          "type": ["array", "null"],
+          "minItems": 4,
+          "maxItems": 4,
+          "items": {
+            "type": "array",
+            "minItems": 4,
+            "maxItems": 4,
+            "items": { "type": "number" }
+          },
+          "description": "4x4 位姿。方向约定固定为 world_from_camera；若源数据为 camera_from_world，adapter MUST 在此转换并在 provenance 中记录。"
+        },
+        "coordinate_convention": {
+          "type": "string",
+          "description": "如 'x_right_y_down_z_forward'。未确认时写 'unknown'（SPEC §14.10）。"
+        },
+        "pose_source": {
+          "enum": ["native", "derived", "unknown"],
+          "default": "unknown"
+        }
+      }
+    },
+
+    "lidar": {
+      "type": "object",
+      "required": ["point_uri", "format"],
+      "additionalProperties": false,
+      "properties": {
+        "point_uri": { "type": "string", "minLength": 1 },
+        "format": { "enum": ["ascii_xyz", "ascii_xyzi", "binary_npy", "pcd", "ply"] },
+        "timestamp_ns": { "type": ["integer", "null"], "minimum": 0 },
+        "point_count": { "type": ["integer", "null"], "minimum": 0 },
+        "fields": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "实际存在的逐点字段，如 ['x','y','z']。不得臆造 intensity/ring 等不存在的字段。",
+          "default": []
+        },
+        "native_label_uri": { "type": ["string", "null"] }
+      }
+    },
+
+    "native_annotation": {
+      "type": "object",
+      "required": ["annotation_type", "uri"],
+      "additionalProperties": false,
+      "properties": {
+        "annotation_type": {
+          "enum": [
+            "semantic_2d", "instance_2d", "semantic_3d", "instance_3d",
+            "detection_2d", "detection_3d", "tracking", "mesh", "point_cloud_map",
+            "gnss_track", "other"
+          ]
+        },
+        "uri": { "type": "string", "minLength": 1 },
+        "label_space": { "type": ["string", "null"] },
+        "supervision_level": {
+          "enum": ["strong", "deterministic_derived", "filtered_pseudo", "weak", "language_generated"],
+          "description": "SPEC §42。数据集原生人工标注为 strong。"
+        },
+        "notes": { "type": ["string", "null"] }
+      }
+    },
+
+    "scale": {
+      "type": "object",
+      "required": ["status", "source"],
+      "additionalProperties": false,
+      "description": "场景尺度状态（SPEC §13）。metric 与 relative 必须严格区分（铁律 8）。",
+      "properties": {
+        "status": { "enum": ["metric", "relative", "unknown"] },
+        "source": {
+          "enum": ["rtk_gps", "gnss", "lidar", "stereo_baseline", "gcp", "imu", "none", "unknown"]
+        },
+        "depth_source": {
+          "enum": ["direct_lidar", "stereo", "sfm_mvs", "rendered_depth", "pseudo_depth", "none"],
+          "description": "SPEC §7 允许值。"
+        },
+        "depth_type": {
+          "enum": ["metric", "externally_anchored", "relative", "affine_invariant", "pseudo"],
+          "description": "SPEC §14.11。每份深度制品必须且只能声明一种。"
+        },
+        "uncertainty_m": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "description": "尺度不确定度（米）。未估计时为 null —— null 表示未知，不得当作 0。"
+        },
+        "domain_calibrated": {
+          "type": "boolean",
+          "default": false,
+          "description": "是否已完成 UAV 域尺度校准。model card 声称 metric 不等于此项为真（SPEC §14.11）。"
+        },
+        "anchor_provenance_verified": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+
+    "provenance": {
+      "type": "object",
+      "required": ["adapter_name", "adapter_version", "created_at", "source_paths"],
+      "additionalProperties": true,
+      "description": "SPEC 铁律 10：每个生成物必须保留来源、版本、输入、坐标系、单位、置信度。",
+      "properties": {
+        "adapter_name": { "type": "string", "minLength": 1 },
+        "adapter_version": { "type": "string", "minLength": 1 },
+        "created_at": { "type": "string", "minLength": 1 },
+        "source_paths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "source_digests": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "default": {}
+        },
+        "transforms_applied": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "adapter 施加的所有变换，如 'pose_inverted_to_world_from_camera'。空数组表示未做任何变换。",
+          "default": []
+        },
+        "notes": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

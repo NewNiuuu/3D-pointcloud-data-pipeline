@@ -23,6 +23,83 @@
 
 ## 2026-08-24
 
+### `[需求]` Blob 数据路径登记 — 用户
+
+**要求**：项目推进中会涉及 blob 上的数据路径，提供过一次后不应再重复提供，需记录在 `MANUAL_INPUTS.md`。同时告知：`data/` 中各数据集的点云已由同事用 VGGT-Ω 转换完成，存放在 `Pointcloud-VQA/` 与 `PointCloud-grounding/`。
+
+**改动**：`MANUAL_INPUTS.md` 新增 §3「数据路径登记（Blob）」，登记 D-001 / D-002 两条路径并附实测结构；§5 增加数据路径条目模板，要求**先实测再登记**；后续小节顺延编号。
+
+**实测结果**：
+
+- 这两个路径**不在 `/blob` 挂载点下**（该挂载是另一个 datastore），必须走 `python tools/blob_manager.py ls <路径>` 访问（支持 one-shot，无需进交互界面）。
+- `Pointcloud-VQA/`：`AVImath/` `AirCopBench/` `Floodnet/` `LADI/` `UrbanVideoBench/` `pointcloud_train/` `shareGPT/`
+- `PointCloud-grounding/`：`AAVG/` `DVGBench/` `benchmark/` `crop/` `nyp/` `refdrone/`
+- 叶子层格式：逐图像一个 `.ply`，文件名即图像 ID，单文件约 2.0 MB，生成于 2026-06-24。
+
+**附带结论**：这些点云对应的是飞书已有清单那批数据集，**不是** UAVScenes，因此不作为首批闭环输入。但它们是现成的 VGGT-Ω 产物，可用于在 Layer 2 开工前验证 VGGT-Ω 的实际输出格式与质量，无需自己先跑通推理。其归属取决于 `PROJECT_HANDOFF.md` §19.2 的未决问题。
+
+**附带修正**：M-006（Blob 凭证）由「待提供」改为「已提供 —— 无需用户额外提供」，实测 `blob_manager` 可正常访问。
+
+**涉及文件**：`docs/MANUAL_INPUTS.md`
+
+---
+
+### `[实现]` vertical slice 第 1–2 步：冻结契约 + UAVScenes adapter — Agent
+
+对应 SPEC §34 vertical slice 第 1 步（冻结 ID、artifact 状态、最小 schema、错误码）与第 2 步（单数据集 adapter）。
+
+**新增 `core/`（单一事实来源）**：
+
+- `ids.py` —— SPEC §15 的 7 个 ID 命名空间、`<ns_NNN>` 格式、解析校验、不复用序号的 `IdMinter`
+- `states.py` —— 12 个 pipeline 状态 + 2 个出口、4 种门禁状态、6 道门禁；`validate_transition` **强制要求门禁报告**，仅有状态标签会被拒（SPEC §31）
+- `enums.py` —— 尺度/深度来源/深度类型/无效几何原因/监督等级；`supports_absolute_metric_target` 把铁律 8/9 变成可执行判断
+- `errors.py` —— 57 个错误码，按 `<门禁>-<类别><NN>` 编码，分 hard / warn / stop 三级；hard 与 stop **永不允许推进**
+- `artifact.py` —— 不可变 artifact 信封，`derive()` 自动串联血缘并分配新 ID，`write()` **拒绝覆盖已存在文件**（SPEC §30）
+
+**新增 `schemas/normalized_scene.schema.json`**：SPEC §12 归一化场景契约的 JSON Schema，`additionalProperties: false`，强制 `unit` 只能是 `meter`/`unknown`、坐标系未知时必须显式写 `unknown`。
+
+**新增 `adapters/uavscenes/`**：run 发现、split group 归并、按图像名连接位姿表、官方文件名解析图像-点云配对、定长窗口切分场景、可选落地帧文件。
+
+**新增 `scripts/build_scenes.py`**：CLI，输出以 Artifact 信封写出。
+
+**测试**：`tests/test_core_contracts.py` 35 项（全部针对铁律，不是"代码能跑"）、`tests/test_uavscenes_adapter.py` 21 项（**跑真实数据**，非合成 fixture）。共 56 项全过。
+
+**实际产出**：`scenes/` 下 3 个 AMtown01 场景，各 50 帧、约 85 MB，缺位姿 0、缺点云 0。
+
+**涉及文件**：`core/*`、`schemas/normalized_scene.schema.json`、`adapters/*`、`scripts/build_scenes.py`、`tests/*`
+
+---
+
+### `[修正]` 实测确定 T4x4 位姿方向与世界系尺度 — Agent
+
+**背景**：`dataset_card.yaml` 中 `coordinate_system` 原为 `UNRESOLVED`。若猜错位姿方向，整条几何链路会静默出错。
+
+**方法**：用 RTK 轨迹交叉验证两种假设。
+
+**结论**：
+
+1. **`T4x4` 是 `world_from_camera`**，平移列即相机中心。与 RTK 水平轨迹绝对相关 **0.9877**；`camera_from_world` 假设仅 **0.2155**。轨迹跨度亦逐项吻合（863.6/585.1 m vs RTK 863.0/584.1 m）。
+2. **世界系为米制**。对 4 个地点做 Umeyama 相似变换，尺度因子 **0.9976 ~ 1.0022**，偏离 1.0 最大 **0.241%**。
+3. 强制 `s=1` 后残差 RMS 0.44 ~ 1.89 m，来源是 RTK 天线与相机光心杆臂、RTK 噪声与时间同步 —— **不是尺度误差**，对物体间距离一类任务无影响。HKisland_GNSS01 残差偏高（1.89 m）值得留意。
+
+**影响**：adapter 据此声明 `depth_type: externally_anchored`、`anchor_provenance_verified: true`；`domain_calibrated` 仍为 `false`（域校准尚未做，不得虚报）。
+
+**涉及文件**：`adapters/uavscenes/adapter.py`、`registry/datasets/uavscenes/dataset_card.yaml`
+
+---
+
+### `[修正]` `--limit` 会多解出一个孤儿场景 — Agent
+
+**问题**：`build_scenes.py` 在循环体内检查 `--limit` 后 `break`，但 `_build_scene` 在 `yield` **之前**就已解出帧文件。结果多构建一个场景、多解 85 MB 文件，且因 `break` 发生在写清单前，留下**没有 `scene_manifest.json` 的孤儿目录**。
+
+**修复**：改用 `itertools.islice` 限流，生成器不再被多推进一次。已在干净输出目录验证：`--limit 2` 产出 2 个目录、均带清单。
+
+**遗留**：首次运行产生的孤儿目录 `scenes/uavscenes_AMtown01_0003` 仍在磁盘上（删除操作未获授权），需人工清理。
+
+**涉及文件**：`scripts/build_scenes.py`
+
+---
+
 ### `[修正]` M-004 飞书导出降级为「按需触发」 — 用户提问触发
 
 **用户提问**：不清楚 M-004 飞书导出是做什么的，此前只是把项目进展的飞书文档给过另一位 Agent。
