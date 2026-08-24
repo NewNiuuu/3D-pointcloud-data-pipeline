@@ -1,0 +1,112 @@
+# 3D Grounding —— 对象级
+# 契约：CLAUDE_CODE_PROJECT_SPEC.md §24、§26.1、§43、§47.1
+# 首批任务之一（2026-08-24 用户确认）
+
+task_id: 3d_grounding.object
+version: 0.1.0
+task_family: 3d_grounding
+generation_mode: program_first
+supervision_level: deterministic_derived
+
+description: >
+  给定若干 2D 视角与一组候选 3D 实体的空间属性，用自然语言指代其中一个实体，
+  要求模型返回该实体的稳定 ID。ID 可映射回点云实例，因此同一条标注可同时
+  服务 Qwen（2D+metadata）与原生点云模型两条路线。
+
+three_d_necessity:
+  rationale: >
+    指代语句刻意构造为"仅凭单张 2D 图像无法唯一确定"：例如"距离观察者更远的
+    那一个"、"位于另一栋建筑后方被部分遮挡的那个"。同类外观的实体在图像上
+    高度相似，必须借助 3D 位置、深度序或跨视角可见性才能区分。
+  conditions:
+    - target_anchored_to_pointcloud_entity_not_uniquely_identifiable_from_one_view
+    - answer_changes_under_camera_pose_counterfactual_while_appearance_similar
+    - requires_cross_view_or_occlusion_information
+
+low_altitude_specificity:
+  rationale: >
+    候选实体取自低空航拍视角下的地物（屋顶、杆塔、植被、车辆、地表结构），
+    指代语句绑定无人机当前位姿与飞行高度，方位表述随观察者位姿改变。
+  signals:
+    - uav_pose_altitude_heading
+    - low_altitude_scene_content
+
+required_scene_capabilities:
+  scale_status: metric        # 本 Spec 使用米制距离作为区分依据
+  geometry:
+    - observer_position
+    - entity_centroid
+    - entity_obb
+    - entity_visibility
+  minimum_candidates: 3       # 少于 3 个候选时指代过于平凡
+
+target_anchor:
+  kind: object_id_with_point_support
+  maps_to:
+    - stable_entity_id
+    - instance_point_indices
+    - oriented_bounding_box
+  note: >
+    target 必须能落到点云的点索引与 OBB 上，而非仅仅是一个字符串 ID。
+    这是 pointcloud_native adapter 的消费前提（SPEC §41）。
+
+visual_input_policy:
+  input_type: multi_view_image
+  min_views: 2
+  max_views: 4
+  selection: support_and_context
+  note: 至少含一个 target 可见视角与一个上下文视角
+
+metadata_input_fields:
+  - observer.pose_id
+  - observer.position
+  - observer.forward
+  - entities.object_id
+  - entities.category
+  - entities.geometry.centroid
+  - entities.geometry.obb
+  - entities.visibility.visible_frames
+
+hidden_target_fields:
+  - target.object_id
+  - derived.distance_to_observer
+  - derived.is_ambiguous
+
+derivation_program: select_referent_by_spatial_predicate
+checker: check_object_grounding_answer
+prompt_template: grounding/object_v1
+output_schema: schemas/answers/grounding_object_answer.schema.json
+
+leakage_rules:
+  forbidden_input_fields:
+    - entities.is_target
+    - entities.rank
+    - entities.distance_to_observer     # 会直接泄露"更远/更近"类指代的答案
+    - derived.is_ambiguous
+  note: >
+    候选列表必须保持顺序无关：不得按与 target 的关系排序，否则模型可从位置
+    推断答案。编译器应对候选做确定性打乱（以 scene_id 为种子，保证可复现）。
+
+eligibility:
+  require_all:
+    - candidate_count_at_least: 3
+    - target_visible_in_at_least_n_views: 1
+    - all_candidates_have_valid_obb: true
+  reject_if:
+    - geometry_confidence_below: 0.80
+    - target_and_runner_up_indistinguishable: true   # 由 checker 的歧义检测判定
+
+quality_requirements:
+  minimum_geometry_confidence: 0.80
+  maximum_answer_count: 1
+  ambiguity_policy: must_be_marked_explicitly
+
+adapters:
+  - qwen_2d_metadata
+  - pointcloud_native
+  - multimodal_3d
+
+capability_tags:
+  - grounded_language
+  - cross_view_identity
+  - visibility_occlusion

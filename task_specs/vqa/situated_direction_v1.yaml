@@ -1,0 +1,112 @@
+# situated 3D VQA —— 观察者相对方位
+# 契约：CLAUDE_CODE_PROJECT_SPEC.md §24、§26.2、§43、§45
+# 首批任务之一（2026-08-24 用户确认的 "metric_or_situated" 中的 situated 分支）
+
+task_id: 3d_vqa.situated.observer_relative_direction
+version: 0.1.0
+task_family: 3d_vqa
+generation_mode: program_first
+supervision_level: deterministic_derived
+
+description: >
+  给定无人机当前位姿与某实体的三维位置，提问该实体位于观察者的前/后、左/右。
+  真值由 observer_relative_direction 程序计算。
+
+three_d_necessity:
+  rationale: >
+    "左/右"是观察者相对量而非图像相对量：同一实体在无人机改变朝向后左右互换，
+    而图像内容可能几乎不变（例如原地偏航）。因此答案必须由观察者朝向向量与
+    实体三维位置计算，不能从图像中物体落在画面左右侧读出 —— 后者恰恰是本任务
+    要排除的 2D 捷径。
+  conditions:
+    - answer_changes_under_camera_pose_counterfactual_while_appearance_similar
+    - target_requires_metric_3d_geometry
+
+low_altitude_specificity:
+  rationale: >
+    观察者是飞行中的无人机，其朝向随航迹持续变化，且存在俯视角度下"前方"与
+    "下方"混淆的特有情形；方位判断直接服务于航向决策。
+  signals:
+    - uav_pose_altitude_heading
+    - aerial_active_view_or_visibility_requirement
+
+required_scene_capabilities:
+  scale_status: metric
+  geometry:
+    - observer_position
+    - observer_forward
+    - entity_centroid
+  minimum_candidates: 1
+
+target_anchor:
+  kind: object_id_with_centroid_and_observer_pose
+  maps_to:
+    - stable_entity_id
+    - entity_centroid
+    - observer_pose_id
+  note: 方位是"实体 + 观察者位姿"的二元关系，两端都必须可追溯到点云与相机。
+
+visual_input_policy:
+  input_type: multi_view_image
+  min_views: 1
+  max_views: 2
+  selection: observer_view_first
+  note: 首个视角必须是提问所绑定的观察者位姿对应的那一帧
+
+metadata_input_fields:
+  - observer.pose_id
+  - observer.position
+  - observer.forward
+  - observer.up
+  - entities.object_id
+  - entities.category
+  - entities.geometry.centroid
+
+hidden_target_fields:
+  - derived.longitudinal
+  - derived.lateral
+  - derived.lateral_angle_deg
+
+derivation_program: observer_relative_direction
+checker: check_observer_relative_direction_answer
+prompt_template: vqa/situated_v1
+output_schema: schemas/answers/vqa_situated_direction_answer.schema.json
+
+leakage_rules:
+  forbidden_input_fields:
+    - entities.relative_direction
+    - entities.bearing_deg
+    - derived.longitudinal
+    - derived.lateral
+    - derived.lateral_angle_deg
+  note: >
+    必须给出 observer.forward 与 observer.up，否则"左右"没有定义；但不得给出
+    任何已经算好的方位字段。坐标轴约定必须在提示词中写明（SPEC §26.2）。
+
+eligibility:
+  require_all:
+    - observer_forward_available: true
+    - entity_centroid_available: true
+  reject_if:
+    - geometry_confidence_below: 0.80
+    - lateral_angle_within_deadzone: true    # 死区内左右无稳定真值
+    - target_coincides_with_observer: true
+    - observer_forward_parallel_to_up: true
+
+quality_requirements:
+  minimum_geometry_confidence: 0.80
+  maximum_answer_count: 1
+  lateral_deadzone_deg: 10.0
+  deadzone_rationale: >
+    正前方 ±10° 内，左右判定会随位姿的微小误差翻转。UAVScenes 的绝对配准
+    残差达 0.44~1.89 m，在 20 m 距离上对应约 1.3~5.4° 的角度不确定度，
+    因此 10° 死区留有余量。落在死区的样本判为不合格而非放宽判定。
+
+adapters:
+  - qwen_2d_metadata
+  - pointcloud_native
+  - multimodal_3d
+
+capability_tags:
+  - viewpoint_reasoning
+  - metric_geometry

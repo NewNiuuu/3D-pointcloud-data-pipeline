@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "3D Grounding 对象级答案",
+  "description": "只允许返回候选集内的实体 ID，或显式歧义标记。禁止自由文本。",
+  "oneOf": [
+    {
+      "required": [
+        "object_id"
+      ],
+      "properties": {
+        "object_id": {
+          "type": "string",
+          "pattern": "^<(obj|part|wire|region|route|track|pose)_\\d{3,}>$"
+        },
+        "evidence_frames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "required": [
+        "ambiguous"
+      ],
+      "properties": {
+        "ambiguous": {
+          "const": true
+        },
+        "candidate_ids": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "string",
+            "pattern": "^<(obj|part|wire|region|route|track|pose)_\\d{3,}>$"
+          }
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  ]
+}

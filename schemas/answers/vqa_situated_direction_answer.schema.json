@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "title": "situated VQA 观察者相对方位答案",
+  "required": [
+    "longitudinal",
+    "lateral"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "longitudinal": {
+      "enum": [
+        "front",
+        "behind"
+      ]
+    },
+    "lateral": {
+      "enum": [
+        "left",
+        "right",
+        "ambiguous"
+      ]
+    },
+    "vertical": {
+      "enum": [
+        "above",
+        "below"
+      ]
+    },
+    "observer_pose_id": {
+      "type": "string",
+      "pattern": "^<(obj|part|wire|region|route|track|pose)_\\d{3,}>$"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    }
+  }
+}

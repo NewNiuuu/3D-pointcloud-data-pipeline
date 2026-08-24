@@ -15,6 +15,9 @@
 - LiDAR 为逐帧 ASCII XYZ 三列，**无 intensity/ring/time**，不得臆造这些字段。
 - 图像与点云的配对已由官方完成，编码在点云文件名中：
   ``image<img_ts>_lidar<lidar_ts>.txt``。
+- 两个标注档案各含 ``*_id``（类别 ID）与 ``*_color``（RGB 可视化）两份平行数据，
+  **文件名完全相同**。语义真值取 ``*_id``；按文件名匹配而不指定子目录会随机
+  命中其一（v0.1.0 的缺陷）。
 
 ## 场景切分
 
@@ -38,7 +41,7 @@ from typing import Any, Iterator
 
 __all__ = ["UAVScenesAdapter", "AdapterConfig", "SCENE_SCHEMA_VERSION", "ADAPTER_VERSION"]
 
-ADAPTER_VERSION = "0.1.0"
+ADAPTER_VERSION = "0.2.0"
 SCENE_SCHEMA_VERSION = "0.1.0"
 DATASET_ID = "uavscenes"
 DATASET_VERSION = "iccv2025_camera_ready"
@@ -168,13 +171,17 @@ class UAVScenesAdapter:
 
     def _label_member(self, archive: str, run: str, subdir: str, stem: str,
                       suffix: str) -> str | None:
-        candidate = f"{subdir}/{run}/{subdir.split('/')[0]}/{stem}{suffix}"
-        # 标注档案的内部层级与主档案不同，改用后缀匹配定位
-        want = f"/{run}/"
-        for member in self._members[archive]:
-            if want in member and member.endswith(f"{stem}{suffix}"):
-                return member
-        return None
+        """定位标注成员。
+
+        **必须显式指定子目录**：两个标注档案各含 ``*_id`` 与 ``*_color`` 两份
+        平行数据，**文件名完全相同**（各 2589 个）。早期实现用后缀匹配遍历无序
+        ``set``，会在两者间随机命中，导致约半数帧拿到 RGB 可视化而非类别 ID。
+        此处改为拼接确定路径并校验存在性。
+
+        语义真值一律取 ``*_id``；``*_color`` 仅供人工查看，不进入 pipeline。
+        """
+        member = f"{subdir}/{run}/{subdir}_{'id'}/{stem}{suffix}"
+        return member if member in self._members[archive] else None
 
     # ---------- 归一化 ----------
 
@@ -258,14 +265,16 @@ class UAVScenesAdapter:
                     "native_label_uri": None,
                 }
 
-            cam_label = self._label_member(_ARCHIVE_CAM_LABEL, run, "", stem, ".png")
+            cam_label = self._label_member(
+                _ARCHIVE_CAM_LABEL, run, "interval5_CAM_label", stem, ".png")
             if cam_label:
                 frame["native_labels"]["semantic_2d"] = f"labels_cam/{stem}.png"
             lidar_label = None
             if lidar_member:
                 lidar_stem = lidar_member.rsplit("/", 1)[-1][:-4]
                 lidar_label = self._label_member(
-                    _ARCHIVE_LIDAR_LABEL, run, "", lidar_stem, ".txt")
+                    _ARCHIVE_LIDAR_LABEL, run, "interval5_LIDAR_label",
+                    lidar_stem, ".txt")
                 if lidar_label:
                     frame["lidar"]["native_label_uri"] = f"labels_lidar/{lidar_stem}.txt"
 

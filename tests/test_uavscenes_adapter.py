@@ -137,6 +137,73 @@ class TestSceneContract:
         assert len(diag["camera_translation_span_m"]) == 3
 
 
+class TestNativeLabels:
+    """标注档案有 ``*_id`` 与 ``*_color`` 两份同名平行数据。
+
+    v0.1.0 用后缀匹配遍历无序 set，会在两者间随机命中，约半数帧拿到 RGB
+    可视化而非类别 ID。以下测试锁死"只取 ``_id``"。
+    """
+
+    def test_camera_label_comes_from_id_directory(self, adapter, scene):
+        labeled = [f for f in scene["frames"] if f["native_labels"].get("semantic_2d")]
+        assert labeled, "该场景没有关联到任何图像语义标注"
+        for frame in labeled:
+            member = adapter._label_member(
+                "interval5_CAM_label.zip", "interval5_AMtown01",
+                "interval5_CAM_label", frame["frame_id"], ".png")
+            assert member is not None
+            assert "_id/" in member, member
+            assert "_color/" not in member, member
+
+    def test_lidar_label_comes_from_id_directory(self, adapter, scene):
+        labeled = [f for f in scene["frames"]
+                   if (f.get("lidar") or {}).get("native_label_uri")]
+        assert labeled, "该场景没有关联到任何点云语义标注"
+        for frame in labeled:
+            stem = Path(frame["lidar"]["point_uri"]).stem
+            member = adapter._label_member(
+                "interval5_LIDAR_label.zip", "interval5_AMtown01",
+                "interval5_LIDAR_label", stem, ".txt")
+            assert member is not None
+            assert "_id/" in member, member
+            assert "_color/" not in member, member
+
+    def test_lidar_label_is_single_column_class_id(self, adapter):
+        """``_id`` 是单列类别 ID；若误取 ``_color`` 会是三列 RGB。"""
+        import zipfile
+        zf = zipfile.ZipFile(DATA_ROOT / "interval5_LIDAR_label.zip")
+        member = adapter._label_member(
+            "interval5_LIDAR_label.zip", "interval5_AMtown01",
+            "interval5_LIDAR_label",
+            "image1658137057.641204937_lidar1658137057.624840774", ".txt")
+        lines = [l for l in zf.read(member).decode().splitlines() if l.strip()]
+        assert lines, "标签文件为空"
+        widths = {len(l.split()) for l in lines}
+        assert widths == {1}, f"期望单列类别 ID，实得列数 {widths}（可能误取了 _color）"
+        assert all(l.strip().isdigit() for l in lines[:100])
+
+    def test_label_line_count_matches_point_count(self, adapter):
+        """逐点标签必须与点云行数一一对应，否则索引会错位。"""
+        import zipfile
+        lidar_zip = zipfile.ZipFile(DATA_ROOT / "interval5_CAM_LIDAR.zip")
+        label_zip = zipfile.ZipFile(DATA_ROOT / "interval5_LIDAR_label.zip")
+        stem = "image1658137057.641204937_lidar1658137057.624840774"
+        points = lidar_zip.read(
+            f"interval5_CAM_LIDAR/interval5_AMtown01/interval5_LIDAR/{stem}.txt")
+        labels = label_zip.read(adapter._label_member(
+            "interval5_LIDAR_label.zip", "interval5_AMtown01",
+            "interval5_LIDAR_label", stem, ".txt"))
+        n_points = len([l for l in points.decode().splitlines() if l.strip()])
+        n_labels = len([l for l in labels.decode().splitlines() if l.strip()])
+        assert n_points == n_labels, f"点数 {n_points} != 标签数 {n_labels}"
+
+    def test_unknown_stem_returns_none_not_random_match(self, adapter):
+        """不存在的 stem 必须返回 None，而不是模糊匹配到别的文件。"""
+        assert adapter._label_member(
+            "interval5_LIDAR_label.zip", "interval5_AMtown01",
+            "interval5_LIDAR_label", "definitely_not_a_real_stem", ".txt") is None
+
+
 class TestSceneSlicing:
     def test_scenes_do_not_cross_runs(self, adapter):
         scenes = list(adapter.build_scenes("interval5_AMvalley02"))

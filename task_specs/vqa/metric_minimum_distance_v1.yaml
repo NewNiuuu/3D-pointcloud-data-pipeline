@@ -1,0 +1,114 @@
+# metric 3D VQA —— 最近距离
+# 契约：CLAUDE_CODE_PROJECT_SPEC.md §24（本 Spec 即 §24 示例的完整化）、§26.2、§43
+# 首批任务之一（2026-08-24 用户确认）
+
+task_id: 3d_vqa.metric.minimum_distance
+version: 0.1.0
+task_family: 3d_vqa
+generation_mode: program_first
+supervision_level: deterministic_derived
+
+description: >
+  给定观察者位姿与若干线状/面状实体的几何，提问哪个实体离观察者最近、距离多少米。
+  真值由 minimum_point_to_polyline_distance 程序计算，模型只负责理解问题与
+  输出结构化答案。
+
+three_d_necessity:
+  rationale: >
+    图像上的像素距离与三维欧氏距离没有稳定对应：透视会让远处大物体看起来更近。
+    答案必须由观察者三维位置与实体三维几何计算，单张 2D 图像无法稳定得出米制数值。
+    并且在保持外观几乎不变的前提下改变相机位姿，答案会改变。
+  conditions:
+    - target_requires_metric_3d_geometry
+    - answer_changes_under_camera_pose_counterfactual_while_appearance_similar
+
+low_altitude_specificity:
+  rationale: >
+    观察者为飞行中的无人机，距离以其当前三维位置为基准；候选实体包含电线、
+    杆塔等低空飞行需要保持净空的细长障碍。该问题是净空评估的最小形式。
+  signals:
+    - uav_pose_altitude_heading
+    - thin_obstacle_or_sparse_open_air_geometry
+
+required_scene_capabilities:
+  scale_status: metric        # 铁律 8：绝对米制目标只能出在 metric 场景
+  depth_type_allowed:
+    - metric
+    - externally_anchored
+  geometry:
+    - observer_position
+    - entity_centerline
+  minimum_candidates: 2
+
+target_anchor:
+  kind: entity_id_with_centerline_and_segment
+  maps_to:
+    - stable_entity_id
+    - centerline_polyline
+    - nearest_segment_index
+  note: >
+    除实体 ID 外还记录最近段索引，使 checker 与人工复核都能定位答案落在
+    折线的哪一段上。
+
+visual_input_policy:
+  input_type: multi_view_image
+  min_views: 2
+  max_views: 3
+  selection: support_and_context
+
+metadata_input_fields:
+  - observer.pose_id
+  - observer.position
+  - entities.object_id
+  - entities.category
+  - entities.geometry.centerline
+
+hidden_target_fields:
+  - derived.minimum_distance
+  - derived.nearest_segment_index
+  - target.object_id
+
+derivation_program: minimum_point_to_polyline_distance
+checker: check_minimum_distance_answer
+prompt_template: vqa/metric_v1
+output_schema: schemas/answers/vqa_metric_distance_answer.schema.json
+
+leakage_rules:
+  forbidden_input_fields:
+    - entities.distance_to_observer
+    - entities.is_nearest
+    - derived.minimum_distance
+    - derived.nearest_segment_index
+  note: >
+    只给 observer.position 与 entities.geometry.centerline 这些**上游**字段，
+    距离必须由模型自行组合推理。若直接给出 distance_to_observer，任务会退化
+    为 JSON 字段抽取（SPEC §5.2 明确指出这一点）。
+
+eligibility:
+  require_all:
+    - candidate_count_at_least: 2
+    - scale_status_is_metric: true
+    - all_centerlines_have_at_least_two_vertices: true
+  reject_if:
+    - geometry_confidence_below: 0.80
+    - nearest_and_runner_up_within_tolerance: true   # 无唯一答案
+    - scale_uncertainty_m_above: 0.5
+
+quality_requirements:
+  minimum_geometry_confidence: 0.80
+  maximum_answer_count: 1
+  numeric_tolerance_m: 0.10
+  tolerance_rationale: >
+    0.10 m 需大于场景尺度不确定度带来的系统误差。UAVScenes 的相对尺度精度
+    优于 0.25%（Umeyama 实测），在 40 m 距离上约 0.1 m，故该容差与数据精度
+    相当。若用于更远距离的实体，应按比例放宽并提升本 Spec 版本。
+
+adapters:
+  - qwen_2d_metadata
+  - pointcloud_native
+  - multimodal_3d
+
+capability_tags:
+  - metric_geometry
+  - thin_structure
+  - flight_safety

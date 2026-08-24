@@ -23,6 +23,66 @@
 
 ## 2026-08-24
 
+### `[实现]` vertical slice 第 7–8 步：确定性几何 + checker + 三类 Task Spec — Agent
+
+**新增 `geometry/primitives.py`**（17 个纯函数，SPEC §14.15 / 铁律 7）：点到线段/折线距离、多折线取最近、点集间最小距离、相机中心与光轴、世界系↔相机系、投影、观察者相对方位、方位角/俯仰角、高度差、质心、AABB、PCA-OBB、视锥测试、可见比例。
+
+设计纪律：纯函数无 I/O（checker 才能独立重算）、单位显式、**退化情形抛 `GeometryError` 而不返回近似值** —— 一个在退化输入上给出貌似合理数值的几何函数会静默污染整个数据集。
+
+**新增 `checkers/task_checkers.py`**（4 个 checker）：三条纪律 —— checker **独立重算 target，不采信样本里存的值**；容差随版本冻结；不做语义宽容。
+
+**新增 `core/task_spec.py`**：Task Spec 加载器，在编译任何样本**之前**静态拦截违规，含铁律 6 的机器可判定形式（含父路径泄漏检测）、checker 注册检查、铁律 8 的尺度资格检查、3D 必要性与低空特性的论证非空检查。
+
+**新增 4 个 Task Spec**（覆盖用户确认的 3 个任务族）：
+
+| Spec | 族 | 推导程序 | checker |
+|---|---|---|---|
+| `3d_grounding.object` | grounding | `select_referent_by_spatial_predicate` | `check_object_grounding_answer` |
+| `3d_vqa.metric.minimum_distance` | vqa | `minimum_point_to_polyline_distance` | `check_minimum_distance_answer` |
+| `3d_vqa.situated.observer_relative_direction` | vqa | `observer_relative_direction` | `check_observer_relative_direction_answer` |
+| `cross_view_correspondence.object` | cross_view | `link_observations_via_lifted_point_support` | `check_cross_view_correspondence_answer` |
+
+**新增 4 个答案输出 schema**（`schemas/answers/`），均 `additionalProperties: false`，ID 用正则锁死 `<ns_NNN>` 格式，数值答案强制显式 `unit`。
+
+**两处把"数据实测结果"写进阈值论证**（而非拍脑袋取值）：
+
+- metric 距离容差 0.10 m —— UAVScenes 相对尺度精度优于 0.25%，40 m 距离上约 0.1 m，容差与数据精度相当；
+- situated 左右死区 ±10° —— 绝对配准残差 0.44~1.89 m，20 m 距离上对应 1.3~5.4° 角度不确定度，10° 留有余量。
+
+**测试**：141 项全过。其中 `test_task_specs.py` 用**故意构造的违规 Spec** 验证校验器确实会拦（12 项）—— 一个从不失败的校验器等于没有校验。
+
+**涉及文件**：`geometry/*`、`checkers/*`、`core/task_spec.py`、`task_specs/*`、`schemas/answers/*`、`tests/test_geometry_and_checkers.py`、`tests/test_task_specs.py`
+
+---
+
+### `[修正]` adapter 标注定位在 `*_id` 与 `*_color` 间随机命中 — Agent
+
+**问题**：两个标注档案各含 `*_id`（类别 ID）与 `*_color`（RGB 可视化）两个平行目录，**文件名完全相同**（各 2589 个）。adapter v0.1.0 的 `_label_member` 用后缀匹配遍历无序 `set`，随机命中其一 —— 已落地场景中约半数帧的标签是 RGB 三元组而非类别 ID。
+
+**初次判断有误**：我最初把这看成"数据集内部标注编码不一致"。实际是我的 adapter 把两个平行目录混为一谈，数据集本身是一致的。
+
+**修复**：改为拼接确定路径 + 存在性校验，语义真值一律取 `*_id`；adapter 版本 0.1.0 → 0.2.0；新增 5 项测试锁死（含"标签行数必须等于点云行数"与"未知 stem 必须返回 None 而非模糊匹配"）。
+
+**副作用**：标注查找从扫描全部成员变为 O(1)，adapter 测试从 21 秒降至 3.7 秒。
+
+**遗留**：已落地的 3 个场景标注不可信，记入 `PENDING_DELETIONS.md` X-002。
+
+**涉及文件**：`adapters/uavscenes/adapter.py`、`tests/test_uavscenes_adapter.py`、`docs/PENDING_DELETIONS.md`
+
+---
+
+### `[需求]` 建立待删除清单，Agent 不再执行删除 — 用户
+
+**要求**：新开一个文档存放待删除内容与删除命令；Agent 正常推进时不管删除，积攒后由用户手动查看处理。
+
+**改动**：新建 `docs/PENDING_DELETIONS.md`；`CLAUDE.md` 增加「不执行删除」条款。删除命令带防误删前置检查。
+
+**保留的例外**（仍需当场请示，因为可能丢失真实成果）：未提交的代码/文档/实验结果、用户提供的原始数据、删除范围可能超预期（通配符/递归删父目录）、无法确定是否还有其他引用。
+
+**涉及文件**：`docs/PENDING_DELETIONS.md`（新建）、`CLAUDE.md`
+
+---
+
 ### `[决策]` 项目定位与 3D-GRPO 关系澄清 — 用户
 
 **澄清内容**：

@@ -1,0 +1,119 @@
+# Cross-view 3D Correspondence
+# 契约：CLAUDE_CODE_PROJECT_SPEC.md §24、§43、§45、PROJECT_HANDOFF §9.2 第 1 项
+# 首批任务之一（2026-08-24 用户确认，选它而非 Metadata Verification，因 3D 必要性更强）
+
+task_id: cross_view_correspondence.object
+version: 0.1.0
+task_family: cross_view_correspondence
+generation_mode: program_first
+supervision_level: deterministic_derived
+
+description: >
+  给定两个不同视角中各一个 2D 实例（以掩码或框标出），判断二者是否对应同一个
+  3D 实体。真值来自 2D-to-3D lifting 后的实体归并结果，而非人工判断相似度。
+
+three_d_necessity:
+  rationale: >
+    这是本批任务中 3D 必要性最强的一个。低空航拍的大视角变化下，
+    同一实体在两视角中的外观可以差异极大（屋顶俯视 vs 侧视），而不同实体
+    （如同一小区中并排的相同楼房、同型号车辆）的外观可以几乎相同。
+    仅靠 2D 外观相似度会同时产生假阴与假阳；唯一可靠依据是二者反投影到
+    三维后是否落在同一实体的点支撑上。
+  conditions:
+    - target_anchored_to_pointcloud_entity_not_uniquely_identifiable_from_one_view
+    - requires_cross_view_or_occlusion_information
+    - two_d_only_baseline_demonstrably_insufficient
+
+low_altitude_specificity:
+  rationale: >
+    低空飞行的视角变化幅度远大于地面驾驶或室内场景：同一目标可在数秒内从
+    斜视变为近乎正下方俯视，且尺度随高度剧变。这正是该任务要检验的能力。
+  signals:
+    - uav_pose_altitude_heading
+    - aerial_active_view_or_visibility_requirement
+    - low_altitude_scene_content
+
+required_scene_capabilities:
+  scale_status: metric
+  geometry:
+    - entity_point_support
+    - camera_poses
+    - entity_visibility
+  minimum_views: 2
+
+target_anchor:
+  kind: entity_pair_with_point_support
+  maps_to:
+    - stable_entity_id
+    - instance_point_indices
+    - observation_to_entity_link
+  note: >
+    正样本的两个观测必须指向同一 entity_id；负样本必须指向两个不同 entity_id，
+    且二者的点支撑集合无重叠。仅凭"两个 track 未被合并"不足以作为负样本 ——
+    未合并也可能是关联失败（SPEC §14.9 要求保留概率化关联图而非硬合并）。
+
+visual_input_policy:
+  input_type: multi_view_image
+  min_views: 2
+  max_views: 2
+  selection: two_views_with_large_baseline
+  note: 两视角需有足够基线或朝向差，否则任务退化为近乎同一张图的比对
+
+metadata_input_fields:
+  - observations.observation_id
+  - observations.frame_id
+  - observations.mask_or_box
+  - observations.category_candidates
+  - cameras.pose_id
+  - cameras.position
+  - cameras.forward
+
+hidden_target_fields:
+  - derived.same_entity
+  - derived.entity_ids
+  - derived.point_support_iou
+
+derivation_program: link_observations_via_lifted_point_support
+checker: check_cross_view_correspondence_answer
+prompt_template: new_tasks/cross_view_v1
+output_schema: schemas/answers/cross_view_correspondence_answer.schema.json
+
+leakage_rules:
+  forbidden_input_fields:
+    - observations.entity_id            # 直接泄露答案
+    - observations.track_id_3d
+    - derived.same_entity
+    - derived.entity_ids
+    - derived.point_support_iou
+  note: >
+    可见的 observation_id 必须与实体 ID 无关（不得由实体 ID 派生），否则模型
+    可从编号规律反推。编译器应为每个样本重新分配与实体无关的观测编号。
+
+eligibility:
+  require_all:
+    - both_observations_have_valid_point_support: true
+    - view_baseline_meters_at_least: 5.0
+    - association_confidence_at_least: 0.85
+  reject_if:
+    - geometry_confidence_below: 0.80
+    - association_unresolved: true       # 关联图未收敛时既非正样本也非负样本
+    - point_support_iou_in_ambiguous_band: true
+
+quality_requirements:
+  minimum_geometry_confidence: 0.80
+  minimum_association_confidence: 0.85
+  positive_negative_ratio_target: 1.0
+  hard_negative_policy: >
+    负样本应优先取同类别、外观相近但三维位置不同的实体对（如相邻的同型建筑），
+    而非随机取两个无关实体 —— 随机负样本会让 2D-only 基线虚高，
+    掩盖任务的真实难度。
+
+adapters:
+  - qwen_2d_metadata
+  - pointcloud_native
+  - multimodal_3d
+
+capability_tags:
+  - cross_view_identity
+  - visibility_occlusion
+  - viewpoint_reasoning

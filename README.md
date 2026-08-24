@@ -348,14 +348,28 @@ flowchart TD
 | Pipeline 代码 | 未开始 |
 | 服务器实验 | 未开始；VGGT-Ω 尚未安装，可获取性待核验 |
 
-### Layer 1 已产出
+### 已产出代码与产物
 
 ```text
-registry/datasets/uavscenes/
-├── dataset_card.yaml      # SPEC §7 契约，含帧级数据契约与 7 项风险
-├── license_review.yaml    # G0 门禁：pass_with_constraints（CC BY-NC-SA 4.0）
-└── file_inventory.json    # 4 个档案 sha256、逐 run 计数、4 个 split group
+core/            冻结契约：ID 命名空间、状态机、枚举、57 个错误码、artifact 信封、Task Spec 加载器
+geometry/        17 个确定性几何函数（任务真值的唯一来源）
+checkers/        4 个确定性 checker（独立重算 target，不采信样本存值）
+adapters/        UAVScenes adapter（run 发现 / split group 归并 / 场景切分）
+schemas/         归一化场景契约 + 4 个答案输出 schema
+task_specs/      4 个 Task Spec，覆盖首批 3 个任务族
+registry/        UAVScenes 的 dataset_card / license_review / file_inventory
+scripts/         build_scenes.py CLI
+tests/           141 项，全部通过
 ```
+
+对应 SPEC §34 vertical slice 的第 1、2、7、8 步。**尚未接入模型，也未使用 GPU。**
+
+| Spec | 族 | checker |
+|---|---|---|
+| `3d_grounding.object` | grounding | `check_object_grounding_answer` |
+| `3d_vqa.metric.minimum_distance` | vqa | `check_minimum_distance_answer` |
+| `3d_vqa.situated.observer_relative_direction` | vqa | `check_observer_relative_direction_answer` |
+| `cross_view_correspondence.object` | cross_view | `check_cross_view_correspondence_answer` |
 
 ## 实施边界（2026-08-24 已确定）
 
