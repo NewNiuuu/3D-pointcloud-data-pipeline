@@ -957,9 +957,28 @@ pseudo_depth
 - 磁盘可用约 5.2T；`/blob` 挂载点当前显示 0 字节，可写性待确认。
 - 本仓库配置了 GitHub remote `origin → WoodSerenity/uavlm.git`，凭证管理规则见 `MANUAL_INPUTS.md`。
 
-### 19.2 尚未确认
+### 19.2 项目定位与 3D-GRPO 的关系（2026-08-24 已澄清）
 
-- 本项目与同级 `3D-GRPO`（SpatialLM + GRPO 训练）的关系：是完全独立的管线，还是本 Pipeline 需要为其供给训练数据。该问题不阻塞 Layer 1，但会影响 Layer 4 的 adapter 优先级。
+**[用户已确认]**
+
+**本 Pipeline 的最终产物**：2D 数据集对应的**点云**，以及该点云对应的**下游任务标注**。两者是一对交付物，缺一不可 —— 只生成点云不算完成。
+
+**Blob 上的点云的定位**（`Pointcloud-VQA/`、`PointCloud-grounding/`，见 `MANUAL_INPUTS.md` §3）：
+
+- 它们是同事已用 VGGT-Ω 从 `data/` 各 2D 数据集转出的**最终点云结果**，即本 Pipeline"2D → 点云"这一步在那批数据集上**已经完成**；
+- 同时，由于下游任务标注必须与点云绑定，这批点云**也可以**作为生成下游标注的中间产物；
+- 究竟是否纳入本轮标注生成，**取决于后续任务设计**，当前不预先锁定。
+
+**3D-GRPO 的定位**：
+
+- 它是本 Pipeline **下游的训练框架**，不是数据生成的一部分；
+- 用途：拿本 Pipeline 产出的点云 + 下游任务标注，先做 SFT，再用 GRPO 训练自有的**点云理解模型**；
+- **当前与数据生成工作解耦**，无需为其调整 Pipeline 排期；
+- 它目前只是初步框架，待新类型数据产出后再相应修改。
+
+**对架构的影响**：SPEC §39/§41 定义的三类 adapter 中，`pointcloud_native`（原生点云模型 adapter）是 3D-GRPO 的直接消费接口，因此其优先级**不低于** `qwen_2d_metadata`。Canonical Task Record 必须保留 `pointcloud_ref` 与 3D target geometry（SPEC §41 已有此要求），这一条从"为将来预留"变为"已有明确消费方"。
+
+注意这不改变铁律 2/3：Qwen 在本架构中仍然只读 2D + metadata，不直接读点云。点云面向的是 3D-GRPO 那条原生点云路线。
 
 ### 19.3 UAVScenes 获取与许可决策（2026-08-24）
 

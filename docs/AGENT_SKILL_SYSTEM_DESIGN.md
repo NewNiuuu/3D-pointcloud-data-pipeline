@@ -580,4 +580,6 @@ release_manifest.json
 
 其中第 1–4 项为 **[用户已确认]**，不得擅自推翻；第 5–7 项为工作默认值，可带记录理由修订。
 
-仍待确认：本项目与同级 `3D-GRPO`（SpatialLM + GRPO 训练）的关系 —— 独立管线，还是需为其供给训练数据。该问题不阻塞 Layer 1，但影响 §4.6 `task-spec-designer` 维护的三类 adapter 的优先级。
+项目定位已于 2026-08-24 澄清（详见 `PROJECT_HANDOFF.md` §19.2）：本 Pipeline 产出**点云 + 下游任务标注**一对交付物；`3D-GRPO` 是下游训练框架（SFT + GRPO 训练点云理解模型），当前与数据生成解耦。
+
+对 §4.6 `task-spec-designer` 的直接影响：其维护的三类 adapter 中，**`pointcloud_native` 已有明确消费方**，优先级不低于 `qwen_2d_metadata`。Task Spec 必须保证 target 可映射到点云几何锚点，而不是只服务 Qwen 的文本接口。

@@ -379,9 +379,13 @@ registry/datasets/uavscenes/
 - VGGT-Ω 尚未安装，其可获取性需在 Layer 2 开工前核验。
 - 需用户手动提供的凭证与材料统一登记在 `docs/MANUAL_INPUTS.md`（当前仅剩飞书导出一项待办）。
 
-### 仍待确认
+### 项目定位（2026-08-24 已澄清）
 
-- 本项目与同级 `3D-GRPO`（SpatialLM + GRPO 训练）的关系：独立管线，还是需为其供数据。不阻塞 Layer 1，但影响 Layer 4 adapter 优先级。
+**本 Pipeline 的最终产物是一对交付物**：2D 数据集对应的**点云** + 该点云对应的**下游任务标注**。只生成点云不算完成。
+
+- Blob 上 `Pointcloud-VQA/`、`PointCloud-grounding/` 中的点云，是同事已用 VGGT-Ω 转出的**最终点云结果**（对应 `data/` 那批数据集）。它们**也可以**作为生成下游标注的中间产物，是否纳入取决于后续任务设计。
+- 同级 `3D-GRPO` 是本 Pipeline **下游的训练框架**：用产出的点云 + 任务标注做 SFT，再用 GRPO 训练自有点云理解模型。**当前与数据生成解耦**，无需为其调整排期。
+- 因此 SPEC §39/§41 三类 adapter 中，`pointcloud_native` 有了明确消费方，优先级不低于 `qwen_2d_metadata`。这不改变铁律 2/3 —— Qwen 仍只读 2D + metadata。
 
 建议首批范围：UAVScenes 单数据集、对象级 L0/L1/L2 metadata、3D Grounding、metric/situated 3D VQA，加 Cross-view Correspondence。
 

@@ -110,14 +110,17 @@ bash /home/aiscuser/nyp/blob_manager.sh         # 交互式界面
 
 **实测文件格式**（以 `Pointcloud-VQA/Floodnet/train/` 为例）：逐图像一个 `.ply`，文件名即图像 ID（如 `10165.ply`），单文件约 2.0 MB，生成时间 2026-06-24。
 
-### 与本 Pipeline 的关系（**未决**）
+### 与本 Pipeline 的关系（2026-08-24 已澄清）
 
-这两个路径下的点云对应的是 `data/` 中的数据集，即**飞书已有清单**那批（FloodNet、LADI、AirCopBench、UrbanVideoBench、AVIMath、RefDrone、AAVG、DVG），**不是** 22 个新增候选，也不是首批数据集 UAVScenes。
+这两个路径下的点云对应 `data/` 中的数据集（FloodNet、LADI、AirCopBench、UrbanVideoBench、AVIMath、RefDrone、AAVG、DVG），**不是** UAVScenes。
 
-因此它们与本 Pipeline 的关系取决于 `PROJECT_HANDOFF.md` §19.2 那个未决问题 —— 本项目与 `3D-GRPO` 是什么关系。在该问题澄清前：
+用户口径（详见 `PROJECT_HANDOFF.md` §19.2）：
 
-- 这些点云**不作为**首批 UAVScenes 闭环的输入；
-- 但它们是现成的 VGGT-Ω 产物，可用于**验证 VGGT-Ω 的实际输出格式与质量**，无需自己先跑通推理 —— 这对 Layer 2 开工前的风险排查有直接价值。
+- 它们是本 Pipeline "2D → 点云"这一步在那批数据集上的**最终点云结果**；
+- 同时**也可以**作为生成下游任务标注的中间产物，**是否纳入取决于后续任务设计**，当前不预先锁定；
+- 与首批 UAVScenes 闭环并行，不互相阻塞。
+
+**当前可立即兑现的价值**：它们是现成的 VGGT-Ω 产物，可用于在 Layer 2 开工前核验 VGGT-Ω 的实际输出格式与质量，无需先跑通推理 —— 这是目前 Layer 2 最大的未知项（VGGT-Ω 尚未安装、可获取性未验证）。
 
 ## 4. 已提供
 
