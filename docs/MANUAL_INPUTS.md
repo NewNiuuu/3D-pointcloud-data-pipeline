@@ -60,14 +60,28 @@ export HF_TOKEN=实际的值
 
 | # | 需要的信息 | 用途 / 触发环节 | 变量名或存放位置 | 状态 | 更新时间 | 备注 |
 |---|---|---|---|---|---|---|
-| M-004 | 飞书数据集清单最新只读导出 | Layer 1 重新核对去重，更新 `feishu_snapshot` | `registry/feishu_snapshot/<date>.yaml` | 待提供 | 2026-08-24 | **只读**。文档 `Oc5Owx8hoifPGikC5ZgcxRzGnDd` 需登录，Agent 无法直接访问；不得修改飞书原文档。**当前唯一待办的用户提供项** |
 | M-002 | HuggingFace Token | 下载 gated **模型权重**（SAM 2.1、Grounding DINO、DINOv2、MoGe-3 等） | `HF_TOKEN` | 待提供 | 2026-08-24 | 部分 gated 仓库还需先在网页端接受协议。到 vertical slice 第 4–5 步才需要。**UAVScenes 数据集本身非 gated，不需要此项** |
 | M-006 | Azure Blob SAS / 存储凭证 | `blob_manager.py` 读写 blob 存储 | 由 `blob_manager` 自身管理 | 待提供 | 2026-08-24 | `/blob` 挂载点当前显示 0 字节，可写性待确认。若现有配置已可用则改为「不需要」 |
 | M-003 | Qwen / DashScope API Key | Layer 2 的 L2-S7 调用 Qwen 生成任务数据 | `DASHSCOPE_API_KEY` | **暂不需要** | 2026-08-24 | 2026-08-24 决策：Qwen 部署暂缓，首批只编译不调用（SPEC §34 第 1–10 步）。**到第 11 步前重新确认**部署方式与预算 |
+| M-004 | 飞书数据集清单最新导出（**文本，非链接**） | **仅** Phase 2 扩充数据集时的去重基准 | `registry/feishu_snapshot/<date>.yaml` | **按需触发** | 2026-08-24 | 详见下方「M-004 说明」。当前不需要，不阻塞任何工作 |
+
+### M-004 说明
+
+**来源**：`PROJECT_HANDOFF.md` §3.2 / §10.1 与 SPEC §5 记载，前一位 Agent 读取过用户提供的飞书文档，从中提取项目已有数据集清单（FloodNet、Open3DVQA、TDBench、LADI-v2、AVI-Math、AirCopBench、SpatialSky、UrbanVideo-Bench、MM-UAVBench、MME-RealWorld、Geo3DVQA），并以此定义「22 个新增候选」= 不在该清单中的数据集。文档要求下一轮调研前重新读取最新内容（**只读，不得修改飞书**）。
+
+**唯一用途**：下一轮数据集调研的去重基准。
+
+**当前不需要的原因**：
+
+1. 首批数据集已定为 UAVScenes 单个并完成 G0，不依赖去重；
+2. 去重只在 Phase 2 扩充数据集时才有价值；
+3. 本机 `data/` 下已有 FloodNet、LADI、AirCopBench、UrbanVideoBench、nuScenes、AVIMath、RefDrone、AAVG、DVG 实物，快照的主要信息已可直接观察。
+
+**需要时的正确交付方式**：**导出为文本粘贴**，而非提供链接 —— 飞书 wiki 需登录态，无头环境无法访问（同 SharePoint 403 的情形）。
 
 ### 优先级说明
 
-- **M-004 是当前唯一待办的用户提供项，且不阻塞首批闭环** —— Layer 1 已有 UAVScenes 可开工。
+- **当前没有阻塞首批闭环的用户提供项。** M-002 到 vertical slice 第 4–5 步才触发，M-003 到第 11 步，M-004 到 Phase 2，M-006 视 blob 实际需求。
 - M-005a 与 M-001 已解决，见「已提供」表。
 
 ## 3. 已提供

@@ -394,3 +394,4 @@ registry/datasets/uavscenes/
 | `PROJECT_HANDOFF.md` | 人类与 Agent | 历史决策、调研依据和约束来源 |
 | `AGENT_SKILL_SYSTEM_DESIGN.md` | Agent / 开发者 | Skill 与质量系统的详细设计草案 |
 | `MANUAL_INPUTS.md` | 用户与 Agent | 需要用户手动提供的信息登记（token、凭证、许可申请、飞书导出）；只记位置不记真实值 |
+| `CHANGELOG.md` | 用户与 Agent | 每一次改动的流水账：需求、决策、实现、文档同步、事实修正 |
