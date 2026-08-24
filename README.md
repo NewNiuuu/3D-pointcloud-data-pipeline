@@ -418,3 +418,4 @@ tests/           141 项，全部通过
 | `VGGT_OMEGA_DEPLOYMENT.md` | 人类与 Agent | VGGT-Ω 的可获取性、许可分层、环境部署与实测输出契约 |
 | `EXPERT_DEPLOYMENT.md` | 人类与 Agent | 专家模型的许可核验、部署状态与实测；逐模型详情见 `registry/experts/` |
 | `FINDINGS.md` | **人类** | 调研发现的简明摘要：结论、影响、详情链接 |
+| `SCALE_RECOVERY_ANALYSIS.md` | 人类与 Agent | 相对深度如何锚定为米制、失效边界与基线阈值 |

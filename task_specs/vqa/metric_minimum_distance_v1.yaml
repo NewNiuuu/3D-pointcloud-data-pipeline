@@ -89,8 +89,12 @@ eligibility:
     - candidate_count_at_least: 2
     - scale_status_is_metric: true
     - all_centerlines_have_at_least_two_vertices: true
+    - camera_baseline_m_at_least: 2.0    # 见 docs/SCALE_RECOVERY_ANALYSIS.md：
+                                         # 基线 0.15 m 时尺度误差达 77%，3.70 m 时 0.5%
   reject_if:
     - geometry_confidence_below: 0.80
+    - scale_recovery_degenerate: true      # 轨迹退化（近静止/纯旋转/相机共线）；
+                                           # 判据是基线与构型，**不是**对齐残差
     - nearest_and_runner_up_within_tolerance: true   # 无唯一答案
     - scale_uncertainty_m_above: 0.5
 

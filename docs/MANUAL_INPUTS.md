@@ -61,7 +61,7 @@ export HF_TOKEN=实际的值
 | # | 需要的信息 | 用途 / 触发环节 | 变量名或存放位置 | 状态 | 更新时间 | 备注 |
 |---|---|---|---|---|---|---|
 | M-007 | **VGGT-Ω 权重访问申请** | Layer 2 的 L2-S1 几何重建 —— 点云主路径，**当前唯一阻塞项** | HF 账号申请 + `HF_TOKEN` | **待提供（阻塞中）** | 2026-08-24 | <https://huggingface.co/facebook/VGGT-Omega> 为 `gated: manual`，需用你的 HF 账号提交访问申请（自动流程审核，作者不参与）。获批后权重 `LICENSE.txt` 才可见，需补做权重许可审查。代码已部署可运行，输出契约已实测，见 `VGGT_OMEGA_DEPLOYMENT.md` |
-| M-008 | **UAVScenes `calibration_results.py`（相机-LiDAR 外参）** | 验证各深度模型的米制尺度是否可信 —— 需把 LiDAR 投影到图像与预测深度逐像素比对 | `data_raw/UAVScenes/` | 待提供 | 2026-08-24 | **不在 interval=5 档案中**，只在 OneDrive/Google Drive 的完整版根目录。没有它，所有模型的 `domain_calibrated` 只能保持 false，绝对米制任务无法解锁（SPEC §14.11） |
+| M-008 | UAVScenes `calibration_results.py`（相机-LiDAR 外参） | 逐像素验证深度**形状**（尺度已可由相机轨迹恢复，见 `SCALE_RECOVERY_ANALYSIS.md`） | `data_raw/UAVScenes/` | **按需触发** | 2026-08-24 | **已降级，不再阻塞米制能力**。原判断「没有它就无法解锁绝对米制任务」不成立 —— 尺度可由 RTK 相机轨迹反解，实测最好误差 0.5%。该文件仍有价值：区分「尺度对但形状错」与「整体偏差」。只在 OneDrive/GDrive 完整版根目录 |
 | M-002 | HuggingFace Token | 下载 gated **模型权重**（SAM 2.1、Grounding DINO、DINOv2、MoGe-3 等） | `HF_TOKEN` | 待提供 | 2026-08-24 | 部分 gated 仓库还需先在网页端接受协议。到 vertical slice 第 4–5 步才需要。**UAVScenes 数据集本身非 gated，不需要此项** |
 | M-003 | Qwen / DashScope API Key | Layer 2 的 L2-S7 调用 Qwen 生成任务数据 | `DASHSCOPE_API_KEY` | **暂不需要** | 2026-08-24 | 2026-08-24 决策：Qwen 部署暂缓，首批只编译不调用（SPEC §34 第 1–10 步）。**到第 11 步前重新确认**部署方式与预算 |
 | M-004 | 飞书数据集清单最新导出（**文本，非链接**） | **仅** Phase 2 扩充数据集时的去重基准 | `registry/feishu_snapshot/<date>.yaml` | **按需触发** | 2026-08-24 | 详见下方「M-004 说明」。当前不需要，不阻塞任何工作 |
@@ -82,7 +82,7 @@ export HF_TOKEN=实际的值
 
 ### 优先级说明
 
-- **M-007 与 M-008 是当前的阻塞项**：前者卡住几何重建，后者卡住米制尺度验证。
+- **M-007 是当前唯一阻塞项**：VGGT-Ω 权重卡住几何重建。M-008 已降级为按需触发。
 - M-007 详情：没有 VGGT-Ω 权重就无法做几何重建，Layer 2 的 L2-S1 之后全部停在这里。
 - 其余：M-002 到 vertical slice 第 4–5 步才触发，M-003 到第 11 步，M-004 到 Phase 2。
 - M-005a、M-001、M-006 已解决，见「已提供」表。
