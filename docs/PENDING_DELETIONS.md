@@ -73,6 +73,14 @@ PYTHONNOUSERSITE=1 /home/aiscuser/miniconda3/envs/nyp-3dpipe/bin/python -c "impo
   && rm -rf /home/aiscuser/nyp/.venv
 ```
 
+```bash
+# X-004 孤儿场景（12 个）：先确认确实无清单，再删
+cd /home/aiscuser/nyp/scenes
+for d in uavscenes_HKisland01_00{01,02,03,04,05,06,07,08,09,10,11,12}; do
+  [ -f "$d/scene_manifest.json" ] && echo "⚠️ $d 有清单，跳过" || rm -rf "$d"
+done
+```
+
 一次性清理全部待删除项（**执行前请先逐条核对上表**）：
 
 ```bash
@@ -88,7 +96,9 @@ rm -rf /home/aiscuser/nyp/scenes/uavscenes_AMtown01_0003 \
 
 | # | 路径 | 删除时间 | 备注 |
 |---|---|---|---|
-| — | — | — | 暂无 |
+| X-001 | `scenes/uavscenes_AMtown01_0003` | 2026-08-25 | 用户手动执行，带前置检查 |
+| X-002 | `scenes/uavscenes_AMtown01_0000/0001/0002` | 2026-08-25 | 坏标注残留。**删除前曾实际造成故障** —— C1 实验想用它做对照组时，`_id`/`_color` 混淆导致通道数不一致直接报错，只得另建 AMtown02_0000 |
+| X-003 | `/home/aiscuser/nyp/.venv` | 2026-08-25 | 废弃 venv，已被 conda `nyp-3dpipe` 取代 |
 
 ## 条目模板
 

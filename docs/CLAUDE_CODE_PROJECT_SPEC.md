@@ -749,6 +749,20 @@ P(point_is_valid)
 
 Calibration MAY use isotonic regression, Platt scaling, conformal calibration, or another validated method. Safety-related confidence SHOULD use a conservative composition such as the minimum of VGGT, expert, agreement, and visibility confidence. Multi-model agreement alone is not ground truth.
 
+**校准 MUST 以场景与成像条件为条件变量，不得拟合一条全局曲线。** 实测（2026-08-25）：
+
+- **场景相关**：同为植被，VGGT-Ω 的 `depth_conf` 中位在 HKisland 为 20.59、
+  AMtown 仅 8.54，相差 2.4 倍；
+- **光照相关**：同地点同航线、亮度降至 0.25× 时，全场 conf 中位降 35%，
+  且**类别间判别力显著坍缩** —— 水面 vs 陆面的 AUC 从 0.865 掉到 0.670，
+  四分位距从 6.91 压缩到 1.86。
+
+第二条的含义比第一条严重：置信度不只是**偏移**了，是**信息量变少**了。
+因此 `P(depth_error < threshold)` 的映射 MUST 按成像条件分档标定，
+且在低照度档位上，**MUST NOT 假定置信度仍能区分失效原因**（§14.5 的原因码
+在该档位需要 LiDAR 残差或语义先验来补，不能只靠 conf 推）。
+详见 `docs/C1_CONFIDENCE_ANALYSIS.md`。
+
 ### 14.14 Circular-Validation Rules
 
 - WorldMirror without VGGT priors MAY act as an independent evaluation cross-check.
@@ -1855,8 +1869,12 @@ Qwen still MUST NOT consume raw point clouds in the current architecture. Point-
 
 - 依据：LiDAR 与视觉深度的残差可程序化产出**失效区域标注**；
 - 天然大样本：HKisland 约 40% 为水面类别，HKairport 约 52% 为均质硬化面；
-- 受控实验：`*_GNSS_Evening` 与日间航次**同地点同航线**，几何真值相同、成像退化 ——
-  同一问题白天应答准、傍晚应答「不确定」；
+- 受控实验：`*_GNSS_Evening` 与日间航次**同地点同航线**（RTK 实测同点位可配到 10 m 内），
+  几何真值相同、仅成像退化 —— 同一问题白天应答准、傍晚应答「不确定」。
+  **但配对 MUST 按亮度选段，不能整个航次一概而论**：`_Evening` 内部存在亮度梯度，
+  17:43 段仍是黄金时刻（亮度 0.354，比日间还亮），只有 18:00 之后才真正变暗
+  （0.0864）。用亮头做「暗对照」会得到「傍晚更亮」的假结论（实测已发生，见
+  `docs/C1_CONFIDENCE_ANALYSIS.md` §8）；
 - 失效原因必须分别保留（§14.5）：`water`、`reflection_or_transparency`、
   `low_depth_confidence`、`sky`、`reprojection_inconsistent`、纹理缺失。
 
@@ -1887,6 +1905,10 @@ Qwen still MUST NOT consume raw point clouds in the current architecture. Point-
 
 `*_GNSS_Evening` 与日间航次配对，同地点同几何。可区分
 **真实的三维变化** 与 **仅由光照/成像条件造成的表观差异**。
+
+配对 MUST 同时约束三项，缺一则对照不成立：RTK 绝对坐标质心距离（航线一致）、
+图像亮度比（退化幅度真实存在）、相机基线（两侧都有足够视差）。
+**仅按航次名配对是错的** —— 见 §40.3 C1 的亮度梯度说明。
 
 ### 40.4 保留但当前不适用
 
@@ -2061,7 +2083,7 @@ These tasks SHOULD include hard cases where similar 2D appearance corresponds to
 | 深度可信度判定 | 逐区域 `reliable / unreliable` + 置信区间 | LiDAR 与视觉深度的对齐残差超阈值 |
 | 失效原因归因 | `water` / `reflection_or_transparency` / `low_depth_confidence` / `sky` / `texture_poor` | §14.5 各原因掩码 + 语义标注 + 残差模式 |
 | 不确定性感知回答 | `answer` / `interval` / `unknown` / `request_view` | 该区域是否通过可信度门限 |
-| 跨时段可信度对照 | 同问题在日间/傍晚航次的答案与置信度变化 | `*_Evening` 与日间航次同地点配对 |
+| 跨时段可信度对照 | 同问题在日间/傍晚航次的答案与置信度变化 | `*_Evening` 与日间航次同地点配对，**配对须同时满足 RTK 质心距离、亮度比、基线三项约束**（§40.3 C4） |
 
 **这是本数据集最不可替代的能力。** target 由 LiDAR 与视觉深度的残差**程序化产生**，
 不依赖人工标注。所有失效原因 MUST 分别保留，不得合并为单一 invalid 概率（§14.5）。

@@ -41,7 +41,7 @@ from typing import Any, Iterator
 
 __all__ = ["UAVScenesAdapter", "AdapterConfig", "SCENE_SCHEMA_VERSION", "ADAPTER_VERSION"]
 
-ADAPTER_VERSION = "0.2.0"
+ADAPTER_VERSION = "0.3.1"
 SCENE_SCHEMA_VERSION = "0.1.0"
 DATASET_ID = "uavscenes"
 DATASET_VERSION = "iccv2025_camera_ready"
@@ -185,8 +185,86 @@ class UAVScenesAdapter:
 
     # ---------- 归一化 ----------
 
+    def iter_scene_specs(self, run: str) -> Iterator[dict[str, Any]]:
+        """只产出场景的**元信息**（不解帧文件、不落盘），供筛选用。
+
+        **为什么需要它**：:meth:`build_scenes` 在 ``yield`` **之前**就会解出帧文件
+        （materialize 模式下）。因此「遍历若干场景、挑一个合适的、break」这种
+        再自然不过的写法，会把 break 之前的所有场景都落盘成孤儿目录。
+
+        这个坑踩过两次：`PENDING_DELETIONS` 的 X-001 与 X-004。
+        第一次只在 CLI 里用 ``itertools.islice`` 打了补丁，没覆盖临时脚本里的
+        裸循环 —— 所以第二次照样中招。**根治办法是提供一个无副作用的扫描接口。**
+
+        典型用法：
+
+        ```python
+        best = max(ad.iter_scene_specs(run),
+                   key=lambda s: norm(s["camera_translation_span_m"]))
+        scene = ad.build_scene_by_index(run, best["scene_index"])   # 只落这一个
+        ```
+        """
+        images = self._image_members(run)
+        if not images:
+            raise ValueError(f"run {run!r} 中没有图像")
+        sampleinfos = self._read_sampleinfos(run)
+        cfg = self.config
+        for start in range(0, len(images), cfg.stride):
+            window = images[start : start + cfg.frames_per_scene]
+            if len(window) < cfg.min_frames_per_scene:
+                break
+            centers = []
+            for member in window:
+                info = sampleinfos.get(member.rsplit("/", 1)[-1])
+                if info:
+                    T = info["T4x4"]
+                    centers.append([T[0][3], T[1][3], T[2][3]])
+            if not centers:
+                continue
+            xs, ys, zs = zip(*centers)
+            yield {
+                "scene_index": start // cfg.stride,
+                "scene_id": f"{DATASET_ID}_{run.replace('interval5_', '')}"
+                            f"_{start // cfg.stride:04d}",
+                "frames": len(window),
+                "frames_with_pose": len(centers),
+                "camera_translation_span_m": [
+                    round(max(v) - min(v), 3) for v in (xs, ys, zs)],
+            }
+
+    def build_scene_by_index(self, run: str, scene_index: int) -> dict[str, Any]:
+        """只构建指定序号的场景。
+
+        **直接定位窗口后只调一次** :meth:`_build_scene`，
+        不遍历 :meth:`build_scenes`。
+
+        第一版实现遍历 ``build_scenes()`` 找匹配项 —— 但落盘发生在 ``_build_scene``
+        内部，于是目标之前的每一个场景都被落了盘。这是同一个坑的第三次
+        （`PENDING_DELETIONS` X-001、X-004、X-005）。
+        **教训：只要落盘是迭代的副作用，任何"遍历+挑选"的写法都会中招；
+        必须提供不经过迭代的直接入口。**
+        """
+        images = self._image_members(run)
+        if not images:
+            raise ValueError(f"run {run!r} 中没有图像")
+        cfg = self.config
+        start = scene_index * cfg.stride
+        window = images[start : start + cfg.frames_per_scene]
+        if len(window) < cfg.min_frames_per_scene:
+            raise ValueError(
+                f"run {run!r} 序号 {scene_index} 的窗口只有 {len(window)} 帧，"
+                f"少于 min_frames_per_scene={cfg.min_frames_per_scene}")
+        return self._build_scene(
+            run, self.split_group(run), scene_index, window,
+            self._read_sampleinfos(run), self._lidar_index(run), self._read_rtk(run))
+
     def build_scenes(self, run: str) -> Iterator[dict[str, Any]]:
-        """把一个 run 切成若干归一化场景。"""
+        """把一个 run 切成若干归一化场景。
+
+        .. warning::
+           materialize 模式下，本方法在 ``yield`` **之前**就会解出帧文件。
+           若只想挑选片段而不落盘，请用 :meth:`iter_scene_specs`。
+        """
         images = self._image_members(run)
         if not images:
             raise ValueError(f"run {run!r} 中没有图像")
