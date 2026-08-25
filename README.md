@@ -111,14 +111,49 @@
 |---|---|---|
 | L2-S0 | Dataset Adapter / 场景切分 | ✅ `adapters/uavscenes/` v0.3.1，82 个场景落盘 |
 | L2-S1 | **VGGT-Ω 几何重建** | ✅ **权重已就位并多次跑通**（24 帧 @512 约 1.67 s） |
-| L2-S2 | 2D/视频专家推理 | ⚠️ 7 个模型已部署验证，**尚未产出 artifact** |
+| L2-S2 | 2D/视频专家推理 | ⚠️ 9 个模型已部署验证（见下表），**除 OneFormer 外尚未产出 artifact** |
 | L2-S2B | 独立几何专家 | ⚠️ 同上（MoGe-3 / DA3 已跑通，独立环境） |
-| L2-S3 | 2D→3D 提升与融合 | ⬜ 未开工 |
+| L2-S3 | 2D→3D 提升与融合 | ⚠️ 实例边界 × 语义类别的融合已实现（`pipeline/instance_fusion.py`），**2D→3D 提升未开工** |
 | L2-S4 | Metadata 派生 | ⚠️ 几何函数已备（`geometry/` 17 个），未接线 |
 | L2-S5 | 质量与 provenance | ⚠️ artifact 信封已备，门禁未实现 |
 | L2-S6 | **Task 编译** | ✅ 编译器 + 4 个推导程序，运行时泄漏检查、候选确定性打乱 |
 | L2-S7 | 模型生成 | ✅ **Qwen3.5-35B-A3B 服务已就绪**（多模态验证通过），待接线 |
 | L2-S8 | 样本校验 | ⚠️ 4 个 checker 已备，调度未实现 |
+
+### 🤖 已跑通的模型
+
+> **「跑通」分三级，别混为一谈**：能出输出 ≠ 在航拍数据上验证过 ≠ 已接进管线产出 artifact。
+> **「已接线」那一列**才是决定 L2 能不能往前走的 —— 现在只有 2 行是 ✅。
+>
+> 列义：**部署跑通** = 权重能加载、真实图上能出输出；**航拍验证** = 在 UAVScenes 上核过输出质量
+> （⬜ 表示只跑通没核验，不是「核验失败」）；**已接线** = 已在管线代码里产出 artifact。
+> 每个模型的实测数字、输出契约、已知限制在 `registry/experts/*.yaml`；复现命令在 `docs/OPERATIONS.md`。
+
+| 模型 | 角色 | 部署跑通 | 航拍验证 | **已接线** | 许可 | 峰值显存 |
+|---|---|:---:|:---:|:---:|---|---:|
+| **VGGT-Ω 1B @512** | 点云主路径（L2-S1） | ✅ | ⬜ | ✅ 82 场景落盘 | FAIR **NC** | 6.53 GB |
+| **OneFormer ADE20K Swin-L** | 语义类别 —— **管线唯一的类别来源** | ✅ | ✅ | ✅ `pipeline/segmentation.py` | MIT | 4.54 GB |
+| **Grounded-SAM-2**（组合） | 开放词表实例**边界** | ✅ | ⚠️ 见下 | ⬜ R-96 | Apache-2.0 | 2.37 GB |
+| └ Grounding DINO Base | 文本→框（**只用框，不用标签**） | ✅ | ⚠️ 类别零判别力 | ⬜ | Apache-2.0 | 2.01 GB |
+| └ SAM 2.1 Hiera Base+ | 框→mask、视频跟踪 | ✅ | ✅ | ⬜ | Apache-2.0 | — |
+| **MoGe-3 ViT-L** | **首选**独立几何交叉校验 | ✅ 独立环境 `nyp-moge` | 🟡 定性 | ⬜ | MIT | 2.87 GB |
+| **DA3Metric-Large** | 单目 metric 深度 + sky 掩码 | ✅ | 🟡 定性 | ⬜ | Apache-2.0 | 2.91 GB |
+| **DA3-LARGE-1.1** | 深度/位姿第二意见（**输出 relative，非 metric**） | ✅ | ⬜ | ⬜ | Apache-2.0 | 3.62 GB |
+| **DINOv2 Base** | 跨视角外观 embedding（768 维） | ✅ | ⬜ | ⬜ | Apache-2.0 | 0.37 GB |
+| **CoTracker3 Offline** | 点轨迹与可见性 | ✅ | ⬜ | ⬜ | **非商用**（全文待审） | 0.86 GB |
+
+**两条要记住的**：
+
+- **Grounded-SAM-2 只出边界，类别一律走 OneFormer** —— 负控标定下 Grounding DINO 的判别比 1.03–1.28，
+  "a dinosaur" 得分高过所有真实提示词。融合在 `pipeline/instance_fusion.py`（见 R-96）。
+- **VGGT-Ω / CoTracker3 是非商用许可**，加上 DSINE / UFM / DAM-3B / SegFormer 的 NC 传递条款，
+  **发布数据集不可逆地锁定为非商用**（不压低天花板：UAVScenes 本身就是 CC BY-NC-SA 4.0）。
+
+**未部署 / 有问题的**：Florence-2 Large（transformers 版本不兼容）、PowerLine-MTYOLO（卡在 A-YOLOM fork）、
+DSINE / UFM / DAM-3B / SegFormer（许可已核，尚未接入）。
+
+**非专家模型**：Qwen3.5-35B-A3B vLLM 服务已就绪（多模态验证通过），用于 L2-S7 生成与后续增益测评；
+**用完必须显式停**（`3D-Anything/stop_qwen35.sh`，见 `CLAUDE.md` 规则 2）。
 
 ### 一句话总结
 
