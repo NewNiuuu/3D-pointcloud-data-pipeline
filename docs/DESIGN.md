@@ -134,21 +134,29 @@ local_workspace_role: design_and_control_plane
 
 ## 0.4 什么才算「体现了 3D 特征」
 
+> **2026-08-25 修订**：本节原第 2 条为「单张 2D 图像回答不了」，
+> 已按铁律 5 的修订改为可测量的增益判据。理由见铁律 5 的说明框。
+
 三条判据，**缺一不可**：
 
 1. **答案锚定在三维实体上**（§41）：target MUST 映射到点索引、点掩码、OBB、平面、
    区域或相机位姿。只给一个字符串 ID **不算** —— 点云模型无从消费。
-2. **单张 2D 图像回答不了**（铁律 5、§29）：若外观捷径能给出**正确**答案，它就不是 3D 任务。
-   注意判据是「捷径给出正确答案」，不是「捷径比较难」。
+2. **3D metadata 带来可测量的增益**（铁律 5、§29）：
+   `score(2D+metadata) − score(2D only)` MUST 显著大于 0，
+   且打乱/屏蔽相关字段后该增益 MUST 选择性消失。
+   **不要求 2D 完全答不出** —— 那在信息论上不可能，因为我们的 3D 就是从 2D 提取的。
 3. **三维信息是因果性的**：改变三维结构会改变答案，
    而只改变外观（光照、色彩、曝光）**不应**改变答案。**这正是 C4 的直接检验。**
 
-**假 3D 的典型形态（MUST NOT 生成）：**
+**仍然出局的形态（MUST NOT 生成）：**
 
-- 把 2D 识别题搬到点云上（「这是什么颜色的建筑」）；
-- 答案能从 metadata 字段名或字段值直接读出（泄漏，铁律 6）；
-- 数值确实来自 3D，但与外观强相关、模型可用外观回归
-  （如树种已知时问「树有多高」—— 看着像 3D，实为先验查表）。
+- **增益为零**的题 —— 给不给 3D metadata 得分一样，说明它只是披了层壳的 2D 识别题；
+- **伪增益** —— 打乱 metadata 后得分不掉（蒙对/泄漏/长度效应，§29.2）；
+- 答案能从 metadata 字段名或字段值直接读出（泄漏，铁律 6）。
+
+> **注意与旧表述的区别**：先前把「数值来自 3D 但与外观强相关」一概判为假 3D。
+> 现在的判据是**实测增益**：若 3D metadata 确实提分且经得起打乱检验，
+> 即便外观也提供部分线索，任务依然成立。**外观有线索 ≠ 3D 没用。**
 
 ## 0.5 提取一定不准，怎么办
 
@@ -178,7 +186,54 @@ local_workspace_role: design_and_control_plane
 保障机制应当在被保障的东西成型之后再固化。不是不重要，是次序问题。
 详细设计完整保留在本文附录。
 
-## 0.7 建议阅读顺序
+## 0.7 项目的价值定位：蒸馏，与博采百家之长（2026-08-25 [用户已确认]）
+
+诚实地讲清楚本项目是什么、不是什么 —— 这决定了能宣称什么、不能宣称什么。
+
+**不是什么：**
+
+- 不引入新采集的数据集；
+- 不做人工标注；
+- 不训练新的三维基础模型。
+
+**是什么：**
+
+> **把一批各有所长的三维专家模型的能力，蒸馏进一个当前不具备这些能力的 VLM。**
+
+价值分三层，**越往下越不可替代**：
+
+| 层 | 做法 | 能力上限 |
+|---|---|---|
+| **1. 单教师蒸馏** | 把 VGGT-Ω 的几何能力搬进 VLM | 不超过该教师 |
+| **2. 多教师融合（博采百家之长）** | 几何、语义、分割、跟踪、光流各取所长，集中到一个模型 | 各教师能力的**并集** |
+| **3. 集成结构产生的新信号** | 教师之间的**分歧**、几何**自洽违反**、扰动下的**漂移** | **超出任何单个教师的输出接口** |
+
+**第 3 层值得单独说清楚。**
+
+任何一个专家模型都**不会告诉你「我这里不可靠」** ——
+`depth_conf` 是模型的自评，不是错误率，实测已证明它既是场景相对的、
+又在退化下判别力坍缩（`FINDINGS.md`）。
+但把多个独立教师放在一起，**它们的分歧就成了任何单个教师无法从其输出接口提供的信号**。
+
+**这正是 C1 成为旗舰能力的根本原因** —— 它坐落在第 3 层。
+C2/C3 主要在第 2 层，Release A 的基础任务在第 1 层。
+优先级排序（C1 > C2 > C3 > C4）与这三层的不可替代性是一致的，不是巧合。
+
+### 由此得到的自我约束
+
+**MUST NOT 宣称**产出了超越现有专家模型的三维能力 —— 我们没有。
+
+**MAY 宣称**的是三条：
+
+1. **把分散在多个模型里的能力集中**到一个可用的 VLM 上；
+2. **用集成结构造出单教师没有的信号**（可靠性、失效归因）；
+3. **给出一套可移植的方法与实测误差刻画**（§40.6、Release D）。
+
+严格说，第 2 条的信息仍在「各教师输出的并集」之内 —— 分歧是从教师输出算出来的。
+**准确的表述是：它超出任何单个教师的输出接口，而不是超出信息论上限。**
+写作时 MUST 用后一种表述，不得含糊成「创造了新信息」。
+
+## 0.8 建议阅读顺序
 
 代码、schema 与 task spec 中有 **245 处引用现有章节号**，
 因此本次文档重构**不重新编号**。但推荐按推导链的顺序阅读：
@@ -294,7 +349,31 @@ Route / Plan Critique、3D Task Decomposition（其步骤绑定 waypoint 与航�
 2. Qwen MUST consume 2D images/video plus structured 3D metadata.
 3. Qwen MUST NOT consume raw PLY/LAS point clouds in this architecture.
 4. Depth Anything 3, WorldMirror, or other geometry models MAY be used as experts or consistency checks; they MUST NOT replace VGGT-Ω as the primary path.
-5. A generated task MUST require 3D information. Ordinary 2D recognition questions are out of scope.
+5. A generated task MUST demonstrate **measurable 3D lift**: supplying the extracted 3D metadata MUST improve performance over the 2D-only baseline by a margin recorded in the task's evaluation record (§29). Ordinary 2D recognition questions — where the lift is nil — remain out of scope. **A task is NOT required to be unanswerable from 2D alone.**
+
+> **铁律 5 的 2026-08-25 修订（[用户已确认]）**
+>
+> 原文为「A generated task MUST require 3D information」。**该表述在信息论上站不住。**
+>
+> 本项目的 3D metadata 由专家模型从同一批 2D 图像中提取（铁律 14），
+> target 也由视觉信息推出。即 **M = f(I)、Y = g(I)** ——
+> 由数据处理不等式 `I(M;Y) ≤ I(I;Y)`，**凡是能从 M 回答的，原则上都能从 I 回答**。
+> 提取过程只会丢信息，不会凭空造信息。所以「2D 绝对做不到」是**不可能达成**的门槛。
+>
+> 真正的差别不在信息**有没有**，而在信息**取不取得到**：
+> 现有 VLM 在图文对上训练，从未被奖励去做多视三角化、平面拟合、
+> 跨视角关联这类计算，于是**系统性地忽略图像里本就存在的三维线索**。
+> 我们把当前最擅长提取三维的专家模型的输出**显式喂进去**，
+> 它应当带来**增益**——是连续的提升，不是 0/1 的开关。
+>
+> 因此判据由**断言**改为**测量**（§29）。
+> 若确实存在只有 3D 能做、原始 2D 做不到的任务，那当然最好 ——
+> **但不作为准入门槛**（唯一的真例外见 §29.3）。
+>
+> **口子放宽了，但没有放空**：要求从「必须不可解」变成
+> 「必须实测有显著增益，且能排除三种伪增益」。
+> 原判据从未被验证过，新判据每一条都要跑数字 —— 这是收紧，不是放松。
+
 6. Metadata input MUST NOT directly expose the hidden answer or an equivalent derived field.
 7. Deterministically computable values MUST be generated and checked by geometry/rule programs, not accepted solely from an LLM.
 8. Metric and relative scale MUST remain distinct throughout the pipeline.
@@ -1687,7 +1766,11 @@ Expert and lifting validation SHOULD additionally track:
 - confidence calibration using ECE, Brier score, NLL, AUSE, and risk-coverage/AURC;
 - latency, peak memory, FPS, joules/frame, temporary disk, final metadata bytes/frame, video-minute cost, and failure-retry rate.
 
-## 29. 3D Dependency Evaluation
+## 29. 3D 增益评估（3D Lift Evaluation，2026-08-25 重定位）
+
+> **本节由「事后验证」升格为任务准入的操作性判据**（铁律 5 修订）。
+> 原标题为 3D Dependency Evaluation —— 「依赖」暗示 0/1，
+> 而实际要衡量的是**增益**。
 
 Every initial task family MUST be evaluated under:
 
@@ -1701,10 +1784,48 @@ spatial counterfactual
 occluded or weak-visual-evidence subset
 ```
 
-Claims that Qwen uses 3D metadata require both:
+### 29.1 3D 增益的定义与准入线
 
-1. `2D+metadata` improves over `2D-only` on genuinely 3D-dependent tasks.
-2. Shuffling, masking, or counterfactually changing relevant metadata produces predictable degradation or answer changes.
+对同一批样本、同一个模型：
+
+```text
+lift = score(2D + 3D metadata) − score(2D only)
+```
+
+**准入要求（MUST）：**
+
+- `lift` **MUST > 0 且统计显著** —— 报告置信区间，**不得只报点估计**；
+- `lift` 的数值 MUST 记入该任务在 §52 的「衡量指标」一栏；
+- **`lift ≈ 0` 的任务 MUST NOT 进 Release** —— 它没有证明 3D metadata 起了作用，
+  哪怕它看起来很像 3D 任务。
+
+### 29.2 光有 lift 还不够：MUST 排除三种伪增益
+
+| 伪增益 | 表现 | 排除手段 |
+|---|---|---|
+| **泄漏** | metadata 里直接含答案或等价派生量 | 铁律 6 + `task_adapters/base.py` 的运行时扫描 |
+| **蒙对** | metadata 只是提示了答案的格式或取值范围 | **metadata shuffle** —— 打乱后 lift 应当消失 |
+| **无关增益** | 任何额外 token 都能提分（长度效应） | **metadata field masking** —— 只屏蔽相关字段，lift 应当**选择性**消失 |
+
+Claims that the model uses 3D metadata require both:
+
+1. `2D+metadata` improves over `2D-only` on the task；
+2. Shuffling, masking, or counterfactually changing relevant metadata produces
+   predictable degradation or answer changes。
+
+**第 2 条是关键**：只有 lift 而没有「打乱后 lift 消失」，无法区分真增益与伪增益。
+
+### 29.3 与「2D 绝对做不到」的关系
+
+**不要求任务对 2D 不可解**（铁律 5 修订说明）。
+
+**唯一的真例外**是**信息确实不在像素里**的情形：米制尺度锚来自
+EXIF / GPS / 飞控日志 / 气压高度（§40.5 机制 5 的 T3 档），
+这类信息**不在图像信息内容之中**，纯图像模型无从获知。
+
+**C3-b（绝对米制）因此是本项目里少数真正 2D-不可解的任务。**
+这是加分项，**不是门槛** —— C1、C2、C3-a、C4 都不满足这一条，
+它们靠的是可测量的增益。
 
 ## 30. Artifact Lineage
 
@@ -2713,8 +2834,15 @@ Dataset-level validation MUST include 2D-only, metadata-only, 2D+metadata, point
 > 3. **当前上限** —— 我们这批数据在该任务上**能到什么程度、到不了什么程度**（诚实写明）。
 > 4. **好数据的特征** —— 要把这类任务做好，数据须满足什么？**这是给后来者的优化目标。**
 > 5. **衡量指标** —— 怎么判断新数据比我们的好。
+> 6. **3D 增益**（2026-08-25 新增）—— 喂入 3D metadata 相对 2D-only 的实测提升，
+>    带置信区间，并说明打乱/屏蔽后增益如何消失（§29）。
+>    **这一项是铁律 5 的准入线，不是可选补充。**
 >
-> **缺此五项论证的任务不进 Release**（§1.1）。
+> **缺此六项论证的任务不进 Release**（§1.1）。
+>
+> **第 6 项当前状态**：C1–C4 的 3D 增益**尚未实测** —— 需要可调用的 VLM（R-20，暂缓中）。
+> 在拿到数字之前，任何任务 MUST 标注 `lift_unmeasured`，**不得进入正式 Release**。
+> 这是当前最重要的未验证项，见 README 的 R-43。
 
 ### 52.0 通用判据：一个任务类型是否「值得做」
 
@@ -2723,14 +2851,21 @@ Dataset-level validation MUST include 2D-only, metadata-only, 2D+metadata, point
 | 判据 | 含义 | 反例 |
 |---|---|---|
 | **能力真空** | 现有大规模训练数据**系统性地**供不上这个监督 | 「识别建筑物」—— 2D 数据遍地都是 |
-| **捷径不可解** | 外观捷径给出**错误**答案，而不只是「较难」 | 「这是水面吗」—— 看一眼就知道 |
+| **3D 增益显著** | 喂入 3D metadata 后得分**实测**显著提升，且打乱 metadata 后增益消失（§29） | 「这是水面吗」—— 给不给点云都一样答得对 |
 | **可判定** | 存在确定性 checker，不靠 LLM 打分 | 「描述这个场景」—— 无稳定真值 |
 | **真实诉求** | 对应真实作业中的痛点，不是为难模型而设 | 「点云里第 731 个点的坐标」 |
 | **可移植** | 不依赖某数据集特有的传感器（铁律 14） | 「LiDAR 残差是多少」 |
 
-**「能力真空 + 捷径不可解」是本项目的选题核心**：
-模型在图像-答案对上会学到「外观→答案」的捷径。
-**凡是捷径能解决的能力都不缺数据；凡是捷径会给出错误答案的能力，才是真正的空白。**
+> **2026-08-25 修订**：第二条原为「**捷径不可解** —— 外观捷径给出错误答案」。
+> 该判据过严且不可能达成：我们的 3D metadata 本身就是从 2D 提取的（铁律 5 修订说明），
+> 信息论上不存在「2D 绝对答不出」的任务。
+> 改为**实测增益** —— 口子放宽，但要求从「断言不可解」变成「拿出数字并排除伪增益」。
+
+**「能力真空 + 3D 增益显著」是本项目的选题核心**：
+模型在图像-答案对上会学到「外观→答案」的捷径 —— 不是因为三维线索不在图像里，
+而是因为**训练过程从未奖励它去做三维计算**。
+把最擅长三维提取的专家模型的输出显式喂进去，应当带来增益。
+**增益的大小就是这个任务的价值度量**，而不是一个是非判断。
 
 ### 52.1 C1 感知可信度与失效归因
 
@@ -2764,6 +2899,10 @@ Dataset-level validation MUST include 2D-only, metadata-only, 2D+metadata, point
 **校准曲线的 ECE**；以及**在退化条件下上述指标的衰减幅度** ——
 最后一项是本项目发现的关键维度，现有基准都不测。
 
+**3D 增益（第 6 问，待测）**：预期最大 —— 2D VLM 完全没有「几何自洽违反」
+这类信号的接口，它只能靠外观猜「这里像不像不可信」。
+`lift_unmeasured`，需 R-20 解除暂缓后实测。
+
 ### 52.2 C2 安全降落区评估
 
 **能力缺口**：「哪里能降落」需要**几何与语义的联合判断**，
@@ -2792,6 +2931,10 @@ Dataset-level validation MUST include 2D-only, metadata-only, 2D+metadata, point
 **衡量指标**：可降落分割 IoU；**负样本上的假阳率**（首要指标 ——
 把水面判成可降落是灾难性错误，把草坪判成不可降落只是保守）；坡度 MAE。
 
+**3D 增益（第 6 问，待测）**：预期中等偏高 —— 语义部分 2D 本就能做，
+**增益应主要来自坡度与平整度**。因此消融时 MUST 分别屏蔽语义字段与几何字段，
+看增益是否确实来自几何那一半。`lift_unmeasured`。
+
 ### 52.3 C3 地形与高度推理
 
 **能力缺口**：近垂直下视图像**几乎不提供深度线索**。
@@ -2819,6 +2962,10 @@ Dataset-level validation MUST include 2D-only, metadata-only, 2D+metadata, point
 
 **衡量指标**：序数准确率（C3-a）；米制 MAE 与相对误差（C3-b）；
 **以及模型在「外观相同但高度不同」样本对上的准确率** —— 这是捷径检测的直接探针。
+
+**3D 增益（第 6 问，待测）**：C3-a 预期高（nadir 下高度几乎无外观对应物）；
+**C3-b 是本项目唯一预期「2D 原则上不可能」的一类** —— 尺度锚来自 EXIF/GPS，
+信息不在像素里（§29.3）。`lift_unmeasured`。
 
 ### 52.4 C4 成像退化鲁棒与二阶不确定性
 
@@ -2853,14 +3000,22 @@ Dataset-level validation MUST include 2D-only, metadata-only, 2D+metadata, point
 **二阶 —— 置信度判别力（AUC）随退化程度的衰减曲线，以及校准误差（ECE）的漂移**。
 后者是本项目主张应当新增的评测维度。
 
-### 52.5 本项目留给后来者的三句话
+**3D 增益（第 6 问，待测）**：这里的增益形态特殊 ——
+不是「答得更准」，而是**「该改口时改口、该坚持时坚持」**。
+消融的正确对照是：退化后 2D-only 模型的答案漂移幅度 vs 带 3D metadata 的漂移幅度。
+**几何没变时答案不该变**，这正是 §0.4 判据 3 的可测形式。`lift_unmeasured`。
+
+### 52.5 本项目留给后来者的四句话
 
 1. **失效样本是资产。** 现有数据集回避水面、反射、弱纹理，
    而那正是可信度能力唯一的监督来源。
-2. **序数与角度比米制便宜得多，且不损失 3D 必要性。**
+2. **序数与角度比米制便宜得多，且不损失价值。**
    在深度不准的现实下，先把无尺度的任务做扎实，比追求米制精度更划算。
 3. **测「模型在干净输入上多准」是不够的，要测「它的自我评估在退化下是否还成立」。**
    这一维度现有基准普遍缺失，而它恰恰对应真实作业中最危险的失效模式。
+4. **别去证明「2D 做不到」，去测「3D 帮了多少」。**
+   当 3D metadata 本身就是从 2D 提取的时候，前者在信息论上不可能成立；
+   后者是能拿出数字、能被复现、也能被后来者超越的判据。
 
 ---
 
