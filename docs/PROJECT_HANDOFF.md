@@ -980,6 +980,41 @@ pseudo_depth
 
 注意这不改变铁律 2/3：Qwen 在本架构中仍然只读 2D + metadata，不直接读点云。点云面向的是 3D-GRPO 那条原生点云路线。
 
+### 19.4 层级推进顺序调整：第三层降为润色层（2026-08-25）
+
+**[用户已确认]**
+
+**决策**：先完整搭通第一、二、四层，即「数据输入 → 中间的提取/生成/处理 → 下游任务输出」这条主干；**第三层（Skill 与质量监管体系）暂缓**。
+
+**理由（用户原话意）**：第三层是用 Skill 去包装可复用的提示词与核验方法，它本质上是**润色性质**的 —— 应当在已有完整链路可供审视之后，再去判断「哪里可以优化」「哪里值得新增一个用 Skill 实现的能力」。在主干尚未打通时先造 Skill，等于对着不存在的流程写规则。
+
+**这不是取消第三层**，而是调整顺序：先有可运行的链路，再用 Skill 去提炼其中重复出现的决策与校验。
+
+**执行上的关键区分**：
+
+第三层的很多条目具有**双重身份** —— 其*功能*在主干数据流上，其*Skill 封装*才属于第三层。处理原则：
+
+| 条目 | 功能归属 | 现在做什么 |
+|---|---|---|
+| `task-prompt-compiler` | **L2-S6 任务编译**，主干必需 | **实现为普通代码**，不封装为 Skill |
+| `scene-ingestion-validator` | L2-S0 后的接入校验 | 实现为普通校验函数，不封装为 Skill |
+| `task-sample-auditor` | L2-S8 样本校验 | 同上 |
+| `metadata-quality-gate` | L2-S5 质量与 provenance | 同上 |
+| Orchestrator Agent | 第三层调度 | **暂缓** |
+| G1–G6 门禁框架 | 第三层监管 | **暂缓**（单点校验仍做，但不建统一门禁框架） |
+| `dataset-registry-manager` / `expert-registry-manager` | 第三层注册管理 | **暂缓**（注册表本身已存在于 `registry/`，够用） |
+
+即：**保留必要的校验动作，暂不建立统一的 Skill 与门禁框架。**
+
+**受影响的既有设计**：`AGENT_SKILL_SYSTEM_DESIGN.md` §12 的实现顺序（第 4 步 task-prompt-compiler、第 6 步 auditor、第 7 步门禁、第 8 步 Orchestrator）中，涉及 Skill 封装与门禁框架的部分推迟；涉及功能实现的部分保留。
+
+**调整后的主干缺口**（这才是当前应推进的）：
+
+1. **Metadata schema 尚未冻结** —— SPEC §16 的 L0/L1/L2 只有文字描述，`schemas/` 里只有归一化场景契约。这是数据框架的核心缺口。
+2. **Canonical Task Record 未实现** —— SPEC §41 定义了契约，无代码。
+3. **三类 adapter 未实现** —— 其中 `pointcloud_native` 是 3D-GRPO 的直接消费接口。
+4. **L2-S3 提升融合、L2-S4 派生、L2-S6 编译** 均无实现。
+
 ### 19.3 UAVScenes 获取与许可决策（2026-08-24）
 
 数据已获取，Layer 1 的 G0 门禁通过（`registry/datasets/uavscenes/`）。
