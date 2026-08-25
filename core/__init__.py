@@ -20,6 +20,15 @@ from .enums import (
 )
 from .errors import ERROR_CATALOG, ErrorCode, Severity, default_status, describe
 from .ids import IdMinter, Namespace, format_id, is_valid_id, parse_id
+from .metadata import (
+    MetadataError,
+    SCHEMA_VERSION as METADATA_SCHEMA_VERSION,
+    ValidationIssue,
+    derive_metric_eligibility,
+    load_schema,
+    validate_against_schema,
+    validate_snapshot_consistency,
+)
 from .states import (
     ALLOWED_TRANSITIONS,
     Gate,
@@ -47,6 +56,10 @@ __all__ = [
     "ERROR_CATALOG", "ErrorCode", "Severity", "default_status", "describe",
     # ids
     "IdMinter", "Namespace", "format_id", "is_valid_id", "parse_id",
+    # metadata
+    "MetadataError", "METADATA_SCHEMA_VERSION", "ValidationIssue",
+    "derive_metric_eligibility", "load_schema", "validate_against_schema",
+    "validate_snapshot_consistency",
     # states
     "ALLOWED_TRANSITIONS", "Gate", "GATE_FOR_STATE", "GateStatus",
     "PipelineState", "TERMINAL_STATES", "TransitionError",

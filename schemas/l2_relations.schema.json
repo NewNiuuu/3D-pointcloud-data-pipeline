@@ -1,0 +1,172 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NewNiuuu/3D-pointcloud-data-pipeline/schemas/l2_relations.schema.json",
+  "title": "L2 3D Relations",
+  "description": "3D 关系层。契约来源：SPEC §16 L2、§23.4（派生字段必须可重算）。写入 scene package 的 relations.json。\n\n**核心不变量：每条关系 MUST 带 derivation_program 与 inputs** —— 否则 G2 门禁的『派生字段能否由上游重算』无法执行（错误码 DERIVED_FIELD_NOT_RECOMPUTABLE）。\n\n2026-08-25 变化（SPEC §40）：移除 route/trajectory/TTC 类关系；新增 surface 参与的地形关系。",
+  "type": "object",
+  "required": ["schema_version", "scene_id", "relations", "provenance"],
+  "additionalProperties": false,
+
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "scene_id": { "type": "string", "minLength": 1 },
+    "metadata_snapshot_id": { "type": ["string", "null"] },
+    "relations": { "type": "array", "items": { "$ref": "#/$defs/relation" }, "default": [] },
+    "cross_view_links": { "type": "array", "items": { "$ref": "#/$defs/cross_view_link" }, "default": [] },
+    "provenance": { "$ref": "#/$defs/provenance" }
+  },
+
+  "$defs": {
+    "entity_id": { "type": "string", "pattern": "^<(obj|part|wire|region|route|track|pose)_\\d{3,}>$" },
+
+    "relation": {
+      "type": "object",
+      "required": ["relation_id", "relation_type", "subject_id", "value", "derivation"],
+      "additionalProperties": false,
+      "properties": {
+        "relation_id": { "type": "string", "minLength": 1 },
+        "relation_type": {
+          "enum": [
+            "distance_m",
+            "height_difference_m",
+            "azimuth_deg",
+            "elevation_deg",
+            "observer_relative_direction",
+            "slope_difference_deg",
+            "surface_height_above_m",
+            "occludes",
+            "visible_from",
+            "near",
+            "intersect",
+            "contain",
+            "support",
+            "connect",
+            "adjacent"
+          ],
+          "description": "2026-08-25 移除：route_clearance、time_to_collision、reachability、swept_volume_overlap 等航迹/动态类关系（SPEC §40.1）。"
+        },
+        "subject_id": { "$ref": "#/$defs/entity_id" },
+        "object_id": {
+          "oneOf": [{ "$ref": "#/$defs/entity_id" }, { "type": "null" }],
+          "description": "二元关系的另一端。一元关系（如相对观察者的方位）此处为 null，观察者写在 observer_pose_id。"
+        },
+        "observer_pose_id": {
+          "type": ["string", "null"],
+          "description": "observer-relative 类关系 MUST 绑定明确的观察者位姿（§26.1）—— 否则『左右』没有定义。"
+        },
+        "value": {
+          "description": "关系取值。数值型必须与 relation_type 的单位一致；枚举型见 value_enum。",
+          "oneOf": [
+            { "type": "number" },
+            { "type": "boolean" },
+            { "type": "string" },
+            {
+              "type": "object", "additionalProperties": false,
+              "properties": {
+                "longitudinal": { "enum": ["front", "behind"] },
+                "lateral": { "enum": ["left", "right", "ambiguous"] },
+                "vertical": { "enum": ["above", "below"] }
+              }
+            }
+          ]
+        },
+        "unit": {
+          "enum": ["meter", "degree", "ratio", "none"],
+          "description": "数值型关系 MUST 显式声明单位（§27 G4 INVALID_UNIT）。"
+        },
+        "uncertainty": {
+          "type": ["number", "null"], "minimum": 0,
+          "description": "该关系值的不确定度。由上游几何不确定度传播而来，null 表示未估计。"
+        },
+        "ambiguous": {
+          "type": "boolean", "default": false,
+          "description": "值落在判定死区内（如观察者相对方位的 ±10° 横向死区）。ambiguous 的关系 MUST NOT 用作任务真值（§43.3）。"
+        },
+        "derivation": { "$ref": "#/$defs/derivation" }
+      }
+    },
+
+    "cross_view_link": {
+      "type": "object",
+      "required": ["link_id", "observation_a", "observation_b", "same_entity", "probability", "derivation"],
+      "additionalProperties": false,
+      "description": "§14.9：跨视角关联 SHOULD 保留概率化关联图，避免证据冲突时硬合并。",
+      "properties": {
+        "link_id": { "type": "string", "minLength": 1 },
+        "observation_a": { "$ref": "#/$defs/observation_ref" },
+        "observation_b": { "$ref": "#/$defs/observation_ref" },
+        "same_entity": {
+          "type": ["boolean", "null"],
+          "description": "null 表示关联未收敛 —— 此时**既不是正样本也不是负样本**，不得用于生成任务（cross_view Task Spec 的 association_unresolved 拒绝条件）。"
+        },
+        "entity_id": { "oneOf": [{ "$ref": "#/$defs/entity_id" }, { "type": "null" }] },
+        "probability": { "type": "number", "minimum": 0, "maximum": 1 },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "§14.9 要求的多路证据。**不得只凭外观相似度判定** —— 那正是本任务要排除的 2D 捷径。",
+          "properties": {
+            "appearance_similarity": { "type": ["number", "null"] },
+            "centroid_distance_m": { "type": ["number", "null"], "minimum": 0 },
+            "size_ratio": { "type": ["number", "null"], "minimum": 0 },
+            "reprojection_iou": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+            "point_support_iou": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+            "class_compatible": { "type": ["boolean", "null"] },
+            "view_baseline_m": { "type": ["number", "null"], "minimum": 0 }
+          }
+        },
+        "derivation": { "$ref": "#/$defs/derivation" }
+      }
+    },
+
+    "observation_ref": {
+      "type": "object",
+      "required": ["observation_id", "frame_id"],
+      "additionalProperties": false,
+      "properties": {
+        "observation_id": {
+          "type": "string", "minLength": 1,
+          "description": "MUST 与实体 ID 无关（不得由实体 ID 派生），否则模型可从编号规律反推答案 —— 见 cross_view Task Spec 的 leakage_rules。"
+        },
+        "frame_id": { "type": "string", "minLength": 1 },
+        "mask_uri": { "type": ["string", "null"] },
+        "box_xyxy": { "type": ["array", "null"], "minItems": 4, "maxItems": 4, "items": { "type": "number" } }
+      }
+    },
+
+    "derivation": {
+      "type": "object",
+      "required": ["program", "inputs"],
+      "additionalProperties": false,
+      "description": "**本 schema 最重要的约束。** 没有它就无法执行 G2 的『派生字段可重算』检查。program 必须是 geometry/ 或 checkers/ 中已注册的函数名，不得是自由文本描述。",
+      "properties": {
+        "program": {
+          "type": "string", "minLength": 1,
+          "description": "如 point_to_polyline_distance、observer_relative_direction、height_difference。"
+        },
+        "program_version": { "type": ["string", "null"] },
+        "inputs": {
+          "type": "array", "minItems": 1,
+          "items": { "type": "string" },
+          "description": "重算所需的上游字段路径，如 entities.objects[<obj_003>].geometry.centroid。逐字段列出，不得写『相关字段』这类模糊表述。"
+        },
+        "supervision_level": {
+          "enum": ["strong", "deterministic_derived", "filtered_pseudo", "weak", "language_generated"],
+          "default": "deterministic_derived"
+        }
+      }
+    },
+
+    "provenance": {
+      "type": "object",
+      "required": ["created_at", "code_version", "l1_entities_ref"],
+      "additionalProperties": true,
+      "properties": {
+        "created_at": { "type": "string", "minLength": 1 },
+        "code_version": { "type": "string", "minLength": 1 },
+        "l1_entities_ref": { "type": "string", "minLength": 1 },
+        "notes": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

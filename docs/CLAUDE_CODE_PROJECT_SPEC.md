@@ -803,6 +803,18 @@ IDs MUST be stable within a metadata snapshot. Cross-version ID lineage SHOULD b
 
 ## 16. Metadata Layers
 
+> ✅ **L0/L1/L2 schema 已于 2026-08-25 冻结**（版本 `0.1.0`）：
+> `schemas/l0_geometry.schema.json`、`l1_entities`、`l2_relations`、`metadata_snapshot`。
+> 跨层不变量由 `core/metadata.py` 强制（JSON Schema 表达不了的部分）。
+>
+> **相对本节文字描述的两处实质变化**：
+> 1. **新增 `surface` 实体类型** —— C2 可降落性与 C3 地形推理的锚点是平面/表面而非对象，
+>    原 L1 列表缺这一类；
+> 2. **L2 每条关系强制携带 `derivation.program` 与 `inputs`** ——
+>    否则 §23.4 的「派生字段可重算」无从执行。
+>
+> schema 升版 MUST 提升 `SCHEMA_VERSION` 并记入 CHANGELOG；旧快照据此仍可正确解读。
+
 ### L0: Raw Geometry
 
 - camera intrinsics/extrinsics and poses;

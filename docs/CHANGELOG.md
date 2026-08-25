@@ -23,6 +23,37 @@
 
 ## 2026-08-25
 
+### `[实现]` R-10 冻结 L0/L1/L2 Metadata Schema — Agent
+
+数据框架的核心缺口。此前 SPEC §16 只有文字描述，`schemas/` 里只有归一化场景契约。
+
+**新增 4 个 schema（版本 `0.1.0`）**：`l0_geometry`、`l1_entities`、`l2_relations`、`metadata_snapshot`。全部 `additionalProperties: false` —— 打错字的字段名必须报错而非被静默忽略。
+
+**相对 SPEC §16 文字描述的两处实质设计变化**：
+
+1. **新增 `surface` 实体类型**。SPEC 原 L1 只有 object/part/region/route/track，但 **C2 可降落性与 C3 地形推理的锚点是平面/表面**，不是对象。surface 携带 plane 参数、slope_deg、aspect_deg、roughness_m、area_m2、largest_inscribed_circle_m（比面积更贴近「能否放下一台无人机」）。
+2. **L2 每条关系强制携带 `derivation.program` 与 `inputs`**，且 `inputs` 必须逐字段列出。没有它，§23.4 的「派生字段可重算」检查根本无从执行。
+
+**按 §40 新能力范围的调整**：L2 关系类型移除 route_clearance / time_to_collision / reachability / swept_volume_overlap；新增 slope_difference_deg / surface_height_above_m；region 新增 `purpose` 字段区分 depth_reliability / landing_candidate / terrain_patch / change_region。
+
+**`core/metadata.py`** 强制 9 项 JSON Schema 表达不了的跨层不变量：
+
+- 跨层引用完整性、ID 唯一性与格式；
+- **米制资格必须可重推** —— `metric_task_eligible` 不能手工填，必须与 `derive_metric_eligibility()` 的结果一致（铁律 8/9）；
+- 派生程序必须已注册；
+- 无效原因掩码未被合并（§14.5）；
+- 置信度分量未被压成单一分数（§14.8）；
+- **primary 深度制品必须是 VGGT-Ω 且只能有一份**（铁律 1/4）；
+- 层引用必须带内容摘要（快照不可变性的技术保证）。
+
+**metadata_snapshot 的设计要点**：下游唯一该引用的是 `snapshot_id`，不是散落的层文件路径 —— 否则无法保证任务编译时读到的是同一份一致的 metadata。`capabilities` 把资格判定固化进 metadata，Task Spec 的 `required_scene_capabilities` 直接比对；每个为 false 的资格位 MUST 在 `reasons` 给出理由，避免场景被静默丢弃。`l3_capability` 为显式 null 而非省略 —— 「确认没有」与「遗漏」是两回事。
+
+**测试 39 项**：合法 fixture 必须通过（保证 schema 不是紧到没法用，且 fixture 本身是 schema 的可执行文档），每个不变量用故意构造的坏数据验证会被拦下。全库 180 项通过。
+
+**涉及文件**：`schemas/l0_geometry.schema.json`、`l1_entities`、`l2_relations`、`metadata_snapshot`（新建）、`core/metadata.py`（新建）、`core/__init__.py`、`tests/test_metadata_schemas.py`（新建）、SPEC §16
+
+---
+
 ### `[决策]` `[修正]` 低空差异化能力范围重定义（方案 A） — 用户
 
 **背景**：用户提供无人机飞手痛点调研（大疆社区 / Reddit / MavicPilots），要求结合手上实际材料设计下游任务，并明确表示不必被调研报告的优先级牵着走。

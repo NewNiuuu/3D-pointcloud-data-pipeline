@@ -1,0 +1,321 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NewNiuuu/3D-pointcloud-data-pipeline/schemas/l0_geometry.schema.json",
+  "title": "L0 Raw Geometry",
+  "description": "原始几何层。契约来源：SPEC §16 L0、§13、§14.5、§14.8、§14.11、§14.12。写入 scene package 的 geometry_manifest.json。\n\n本层承载三条铁律的可执行形式：铁律 8/9（metric 与 relative 严格区分）、铁律 10（provenance 完整）、§14.5（无效原因必须分别保存）。",
+  "type": "object",
+  "required": ["schema_version", "scene_id", "coordinate_frame", "unit", "scale", "cameras", "depth", "provenance"],
+  "additionalProperties": false,
+
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "scene_id": { "type": "string", "minLength": 1 },
+    "metadata_snapshot_id": { "type": ["string", "null"] },
+
+    "coordinate_frame": {
+      "type": "string",
+      "minLength": 1,
+      "description": "坐标系标识。未确认时 MUST 写 'unknown' —— §27 G1 硬失败 UNKNOWN_COORDINATE_FRAME 据此判定。禁止留空或臆造。"
+    },
+    "unit": { "enum": ["meter", "unknown"] },
+
+    "scale": { "$ref": "#/$defs/scale" },
+
+    "cameras": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/camera" }
+    },
+
+    "depth": {
+      "type": "array",
+      "minItems": 1,
+      "description": "深度制品。可有多份（VGGT-Ω 主路径 + 各独立几何专家的第二意见）。",
+      "items": { "$ref": "#/$defs/depth_artifact" }
+    },
+
+    "normals": {
+      "type": "array",
+      "description": "法向制品。SPEC §14.14 要求至少一路来自独立法向估计器，而非全部由深度微分产生。",
+      "items": { "$ref": "#/$defs/normal_artifact" },
+      "default": []
+    },
+
+    "point_cloud": { "$ref": "#/$defs/point_cloud" },
+
+    "invalid_geometry": {
+      "$ref": "#/$defs/invalid_geometry",
+      "description": "§14.5：各失效原因 MUST 分别保存。合并后的 invalid 概率不得取代分量。"
+    },
+
+    "diagnostics": { "$ref": "#/$defs/diagnostics" },
+    "provenance": { "$ref": "#/$defs/provenance" }
+  },
+
+  "$defs": {
+    "scale": {
+      "type": "object",
+      "required": ["status", "source", "depth_type", "domain_calibrated", "anchor_provenance_verified"],
+      "additionalProperties": false,
+      "description": "SPEC §13/§14.11。metric 与 relative 严格区分（铁律 8）。",
+      "properties": {
+        "status": { "enum": ["metric", "relative", "unknown"] },
+        "source": { "enum": ["rtk_gps", "gnss", "lidar", "stereo_baseline", "gcp", "imu", "camera_trajectory", "none", "unknown"] },
+        "depth_type": {
+          "enum": ["metric", "externally_anchored", "relative", "affine_invariant", "pseudo"],
+          "description": "SPEC §14.11。relative / affine_invariant / pseudo 永远不得产出绝对米制目标。"
+        },
+        "scale_factor": {
+          "type": ["number", "null"],
+          "exclusiveMinimum": 0,
+          "description": "由外部锚点反解的尺度因子。仅当 source 为 camera_trajectory 等反解方式时有值。"
+        },
+        "uncertainty_m": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "description": "null 表示未估计，MUST NOT 当作 0。"
+        },
+        "domain_calibrated": {
+          "type": "boolean",
+          "description": "是否已完成 UAV 域尺度校准。模型自称 metric 不等于此项为真（§14.11）。"
+        },
+        "anchor_provenance_verified": {
+          "type": "boolean",
+          "description": "外部锚点的来源与误差是否已核验通过。"
+        },
+        "camera_baseline_m": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "description": "相机轨迹的最大位移。尺度可信度的必要条件之一 —— 但**不充分**，且 MUST NOT 用对齐残差替代此判据（见 docs/SCALE_RECOVERY_ANALYSIS.md 「重大修正」：2 帧对齐残差恒为 0 而尺度误差可达 460%）。"
+        },
+        "alignment_residual_m": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "description": "锚点对齐残差。**仅作记录，不得作为尺度可信度判据**。"
+        },
+        "alignment_version": {
+          "type": ["string", "null"],
+          "description": "§14.12：loop closure 或重对齐 MUST 产生新版本，不得静默覆盖。"
+        }
+      }
+    },
+
+    "camera": {
+      "type": "object",
+      "required": ["frame_id", "K", "T_world_from_camera", "coordinate_convention", "pose_source"],
+      "additionalProperties": false,
+      "properties": {
+        "frame_id": { "type": "string", "minLength": 1 },
+        "K": {
+          "type": "array", "minItems": 3, "maxItems": 3,
+          "items": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number" } }
+        },
+        "distortion_model": { "enum": ["opencv", "none", "unknown"], "default": "unknown" },
+        "distortion": { "type": "array", "items": { "type": "number" }, "default": [] },
+        "T_world_from_camera": {
+          "type": "array", "minItems": 4, "maxItems": 4,
+          "items": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "type": "number" } },
+          "description": "方向固定为 world_from_camera（平移列即相机中心）。若源数据为 camera_from_world，adapter MUST 转换并在 provenance.transforms_applied 记录。"
+        },
+        "coordinate_convention": {
+          "type": "string",
+          "description": "如 x_right_y_down_z_forward。未确认时写 unknown —— 约定写错会让所有前后左右整体翻转。"
+        },
+        "pose_source": { "enum": ["native", "estimated", "refined", "unknown"] },
+        "image_size_hw": {
+          "type": "array", "minItems": 2, "maxItems": 2,
+          "items": { "type": "integer", "minimum": 1 }
+        },
+        "nadir_angle_deg": {
+          "type": ["number", "null"],
+          "minimum": 0, "maximum": 180,
+          "description": "光轴与水平面夹角，正值朝下。C1–C4 的低空特异性判定依赖此字段（UAVScenes 实测中位 87.6°）。"
+        },
+        "altitude_agl_m": {
+          "type": ["number", "null"],
+          "description": "对地高度。null 表示未估计。"
+        }
+      }
+    },
+
+    "depth_artifact": {
+      "type": "object",
+      "required": ["artifact_id", "producer", "depth_uri", "depth_type", "frame_ids"],
+      "additionalProperties": false,
+      "description": "SPEC §13：MUST 保留阈值化前的原始置信度。",
+      "properties": {
+        "artifact_id": { "type": "string", "minLength": 1 },
+        "producer": { "$ref": "#/$defs/model_ref" },
+        "role": {
+          "enum": ["primary", "cross_check", "metric_prior"],
+          "description": "primary MUST 为 VGGT-Ω（铁律 1/4）。其余模型只能是 cross_check 或 metric_prior。"
+        },
+        "depth_uri": { "type": "string", "minLength": 1 },
+        "confidence_uri": {
+          "type": ["string", "null"],
+          "description": "null 表示该模型不提供置信度（如 DA3Metric-Large）。此类制品 MUST NOT 用于需要置信度的门禁判定。"
+        },
+        "depth_type": { "enum": ["metric", "externally_anchored", "relative", "affine_invariant", "pseudo"] },
+        "frame_ids": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "preprocessing": { "$ref": "#/$defs/preprocessing" },
+        "alignment_to_primary": {
+          "type": ["object", "null"],
+          "additionalProperties": true,
+          "description": "§14.12：非主路径制品与主路径的对齐方式（SE(3)/Sim(3)/scale-shift）及残差。未对齐时为 null，此时不得与主路径直接比较。"
+        }
+      }
+    },
+
+    "normal_artifact": {
+      "type": "object",
+      "required": ["artifact_id", "producer", "normal_uri", "derivation"],
+      "additionalProperties": false,
+      "properties": {
+        "artifact_id": { "type": "string", "minLength": 1 },
+        "producer": { "$ref": "#/$defs/model_ref" },
+        "normal_uri": { "type": "string", "minLength": 1 },
+        "uncertainty_uri": { "type": ["string", "null"] },
+        "derivation": {
+          "enum": ["independent_estimator", "depth_differentiation", "plane_fit"],
+          "description": "§14.14：至少一路法向 SHOULD 为 independent_estimator。全部来自 depth_differentiation 时不得视为独立证据。"
+        }
+      }
+    },
+
+    "point_cloud": {
+      "type": ["object", "null"],
+      "required": ["point_uri", "source", "point_count"],
+      "additionalProperties": false,
+      "properties": {
+        "point_uri": { "type": "string", "minLength": 1 },
+        "source": { "enum": ["direct_lidar", "depth_backprojection", "fused", "native_map"] },
+        "point_count": { "type": "integer", "minimum": 0 },
+        "fields": {
+          "type": "array", "items": { "type": "string" },
+          "description": "实际存在的逐点字段。不得臆造 intensity/ring/time 等源数据没有的字段。"
+        },
+        "producer": { "$ref": "#/$defs/model_ref" }
+      }
+    },
+
+    "invalid_geometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "§14.5：各原因 MUST 分别保存。水面不等于空域 —— 它是常违反朗伯/刚体假设的几何。",
+      "properties": {
+        "reason_masks": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "sky": { "$ref": "#/$defs/mask_ref" },
+            "water": { "$ref": "#/$defs/mask_ref" },
+            "reflection_or_transparency": { "$ref": "#/$defs/mask_ref" },
+            "low_depth_confidence": { "$ref": "#/$defs/mask_ref" },
+            "reprojection_inconsistent": { "$ref": "#/$defs/mask_ref" },
+            "dynamic_geometry": { "$ref": "#/$defs/mask_ref" },
+            "out_of_bounds": { "$ref": "#/$defs/mask_ref" },
+            "texture_poor": {
+              "$ref": "#/$defs/mask_ref",
+              "description": "无纹理均质面。近垂直下视的机场跑道、水面、纯色屋顶常触发，是 C1 的重要失效类型。"
+            }
+          }
+        },
+        "combined_uri": {
+          "type": ["string", "null"],
+          "description": "合并概率 MAY 计算，但 MUST NOT 取代分量掩码（§14.5）。"
+        }
+      }
+    },
+
+    "mask_ref": {
+      "type": "object",
+      "required": ["uri", "producer"],
+      "additionalProperties": false,
+      "properties": {
+        "uri": { "type": "string", "minLength": 1 },
+        "producer": { "$ref": "#/$defs/model_ref" },
+        "encoding": { "enum": ["probability_map", "binary_mask", "coco_rle"], "default": "probability_map" },
+        "calibrated": {
+          "type": "boolean", "default": false,
+          "description": "原始模型置信度是否已校准为错误事件概率（§14.13）。未校准的分数不得直接当概率用。"
+        }
+      }
+    },
+
+    "model_ref": {
+      "type": "object",
+      "required": ["name", "version"],
+      "additionalProperties": false,
+      "description": "铁律 10：模型来源必须完整可追溯。",
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "commit": { "type": ["string", "null"] },
+        "checkpoint_sha256": { "type": ["string", "null"] },
+        "precision": { "enum": ["fp32", "fp16", "bf16", "unknown"], "default": "unknown" },
+        "expert_card": {
+          "type": ["string", "null"],
+          "description": "指向 registry/experts/<id>.yaml。未注册的模型不得产出进入 pipeline 的制品。"
+        },
+        "lineage_group": {
+          "type": ["string", "null"],
+          "description": "§14.14：共享架构谱系的模型（如 MoGe/MetricAnything、VGGT/DA3）MUST 标同一组，不得计为独立证据。"
+        }
+      }
+    },
+
+    "preprocessing": {
+      "type": "object",
+      "required": ["original_size_hw", "processed_size_hw"],
+      "additionalProperties": false,
+      "description": "§14.12：每个专家 MUST 存原图到模型输入的变换，否则像素无法映射回原图索引 VGGT-Ω 的射线。",
+      "properties": {
+        "original_size_hw": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "integer" } },
+        "processed_size_hw": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "integer" } },
+        "H_original_to_model": {
+          "type": ["array", "null"], "minItems": 3, "maxItems": 3,
+          "items": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number" } }
+        },
+        "crop_xywh": { "type": ["array", "null"], "minItems": 4, "maxItems": 4, "items": { "type": "number" } },
+        "resize_mode": { "type": ["string", "null"] }
+      }
+    },
+
+    "diagnostics": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "SPEC §13 第 6/7 条要求的几何诊断。",
+      "properties": {
+        "coverage_ratio": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "reprojection_error_px": { "type": ["number", "null"], "minimum": 0 },
+        "point_density_per_m2": { "type": ["number", "null"], "minimum": 0 },
+        "drift_indicator": { "type": ["number", "null"] },
+        "invalid_depth_ratio": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "failure_signatures": {
+          "type": "array",
+          "items": {
+            "enum": ["dynamic_ghosting", "sky_depth", "water_glass_failure", "repeated_texture_drift", "textureless_surface"]
+          },
+          "default": []
+        },
+        "depth_relief_ratio": {
+          "type": ["number", "null"], "minimum": 0,
+          "description": "深度起伏比 max/min。近垂直下视航拍此值通常接近 1（实测约 1.13），是判定场景是否具备足够深度变化以支撑 C3 任务的依据。"
+        }
+      }
+    },
+
+    "provenance": {
+      "type": "object",
+      "required": ["created_at", "code_version", "source_scene_manifest"],
+      "additionalProperties": true,
+      "properties": {
+        "created_at": { "type": "string", "minLength": 1 },
+        "code_version": { "type": "string", "minLength": 1 },
+        "source_scene_manifest": { "type": "string", "minLength": 1 },
+        "transforms_applied": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "notes": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

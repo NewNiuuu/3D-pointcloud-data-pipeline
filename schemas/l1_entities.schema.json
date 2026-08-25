@@ -1,0 +1,281 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NewNiuuu/3D-pointcloud-data-pipeline/schemas/l1_entities.schema.json",
+  "title": "L1 3D Entities",
+  "description": "3D 实体层。契约来源：SPEC §16 L1、§17 Object Contract、§15 稳定 ID。写入 scene package 的 entities.json。\n\n相对 SPEC v0.2.0 的变化（2026-08-25，见 SPEC §40）：\n- **新增 surface 实体类型** —— C2 可降落性与 C3 地形推理的锚点是平面/表面，不是对象。原 SPEC 只有 object/part/region/route/track，缺这一类。\n- **移除 wire 细线实体的必需性** —— 近垂直下视数据无薄障碍监督。命名空间保留（core/ids.py 未变），但本层不再要求实现 centerline/endpoints/radius。\n- **移除 route/track 的首批必需性** —— 航迹与轨迹类实体已移出范围。",
+  "type": "object",
+  "required": ["schema_version", "scene_id", "objects", "surfaces", "regions", "provenance"],
+  "additionalProperties": false,
+
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "scene_id": { "type": "string", "minLength": 1 },
+    "metadata_snapshot_id": { "type": ["string", "null"] },
+    "id_minter_state": {
+      "type": "object",
+      "additionalProperties": { "type": "integer", "minimum": 0 },
+      "description": "core.ids.IdMinter 的计数器导出。序号不复用，支持增量续分配（§15）。",
+      "default": {}
+    },
+
+    "objects":  { "type": "array", "items": { "$ref": "#/$defs/object" },  "default": [] },
+    "surfaces": { "type": "array", "items": { "$ref": "#/$defs/surface" }, "default": [] },
+    "regions":  { "type": "array", "items": { "$ref": "#/$defs/region" },  "default": [] },
+
+    "unresolved_conflicts": {
+      "type": "array",
+      "description": "§15 第 9 条：冲突 MUST 记录而非强行合并。§14.9 要求保留概率化关联图与 merge/split 血缘。",
+      "items": { "$ref": "#/$defs/conflict" },
+      "default": []
+    },
+
+    "provenance": { "$ref": "#/$defs/provenance" }
+  },
+
+  "$defs": {
+    "entity_id": {
+      "type": "string",
+      "pattern": "^<(obj|part|wire|region|route|track|pose)_\\d{3,}>$",
+      "description": "core.ids 的格式。ID 在同一 snapshot 内不可变；实体分裂/合并 MUST 分配新 ID 并记血缘。"
+    },
+
+    "object": {
+      "type": "object",
+      "required": ["object_id", "category", "geometry", "visibility", "confidence", "provenance"],
+      "additionalProperties": false,
+      "properties": {
+        "object_id": { "$ref": "#/$defs/entity_id" },
+        "category": { "type": "string", "minLength": 1 },
+        "category_candidates": {
+          "type": "array",
+          "items": {
+            "type": "object", "required": ["label", "score"], "additionalProperties": false,
+            "properties": { "label": { "type": "string" }, "score": { "type": "number", "minimum": 0, "maximum": 1 } }
+          },
+          "default": [],
+          "description": "保留候选而非只存 argmax —— 类别歧义本身是可用的监督信号。"
+        },
+        "geometry": { "$ref": "#/$defs/object_geometry" },
+        "point_support": { "$ref": "#/$defs/point_support" },
+        "visibility": { "$ref": "#/$defs/visibility" },
+        "dynamic_state": {
+          "enum": ["static", "dynamic", "unknown"],
+          "default": "unknown",
+          "description": "§14.4：dynamic MUST 基于扣除自运动的残差光流，不得用光流幅值判定。"
+        },
+        "confidence": { "$ref": "#/$defs/confidence" },
+        "lineage": { "$ref": "#/$defs/lineage" },
+        "provenance": { "$ref": "#/$defs/entity_provenance" }
+      }
+    },
+
+    "surface": {
+      "type": "object",
+      "required": ["surface_id", "plane", "extent", "quality", "provenance"],
+      "additionalProperties": false,
+      "description": "平面/表面实体。**C2 可降落性与 C3 地形推理的主锚点。**\n所有几何量 MUST 由确定性程序从点云计算（§14.15），不得由 VLM 估计。",
+      "properties": {
+        "surface_id": { "$ref": "#/$defs/entity_id" },
+        "surface_type": {
+          "enum": ["ground", "roof", "water", "vegetation_canopy", "paved", "facade", "unknown"],
+          "description": "来自语义标注或分割专家。water 与 unknown 对可降落性判定有一票否决作用。"
+        },
+        "plane": {
+          "type": "object",
+          "required": ["normal", "offset_m", "fit_method"],
+          "additionalProperties": false,
+          "properties": {
+            "normal": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number" } },
+            "offset_m": { "type": "number" },
+            "fit_method": { "enum": ["least_squares", "ransac", "pca"] },
+            "inlier_ratio": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+          }
+        },
+        "slope_deg": {
+          "type": ["number", "null"], "minimum": 0, "maximum": 90,
+          "description": "法向与重力方向夹角。C2 的核心判据之一。"
+        },
+        "aspect_deg": {
+          "type": ["number", "null"], "minimum": -180, "maximum": 180,
+          "description": "坡向（法向水平投影的方位角）。C3 用。"
+        },
+        "roughness_m": {
+          "type": ["number", "null"], "minimum": 0,
+          "description": "点到拟合平面残差的 RMS。"
+        },
+        "planarity_residual_p95_m": { "type": ["number", "null"], "minimum": 0 },
+        "extent": {
+          "type": "object",
+          "required": ["area_m2"],
+          "additionalProperties": false,
+          "properties": {
+            "area_m2": { "type": "number", "minimum": 0 },
+            "bbox_3d": { "type": ["array", "null"], "minItems": 6, "maxItems": 6, "items": { "type": "number" } },
+            "boundary_uri": { "type": ["string", "null"] },
+            "largest_inscribed_circle_m": {
+              "type": ["number", "null"], "minimum": 0,
+              "description": "最大内接圆直径。比面积更贴近「能否放下一台无人机」，C2 用。"
+            }
+          }
+        },
+        "point_support": { "$ref": "#/$defs/point_support" },
+        "quality": { "$ref": "#/$defs/confidence" },
+        "provenance": { "$ref": "#/$defs/entity_provenance" }
+      }
+    },
+
+    "region": {
+      "type": "object",
+      "required": ["region_id", "purpose", "point_support", "provenance"],
+      "additionalProperties": false,
+      "description": "空间区域。**C1 深度可信度判定的锚点** —— 「这块区域的深度可不可信」中的「这块区域」。",
+      "properties": {
+        "region_id": { "$ref": "#/$defs/entity_id" },
+        "purpose": {
+          "enum": ["depth_reliability", "landing_candidate", "terrain_patch", "change_region", "generic"],
+          "description": "区域的用途。不同用途的区域由不同程序生成，不得混用。"
+        },
+        "point_support": { "$ref": "#/$defs/point_support" },
+        "pixel_mask_uri": { "type": ["string", "null"] },
+        "frame_ids": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "provenance": { "$ref": "#/$defs/entity_provenance" }
+      }
+    },
+
+    "object_geometry": {
+      "type": "object",
+      "required": ["centroid"],
+      "additionalProperties": false,
+      "properties": {
+        "centroid": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number" } },
+        "centroid_covariance": {
+          "type": ["array", "null"], "minItems": 3, "maxItems": 3,
+          "items": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number" } },
+          "description": "§14.10 要求 lifted 3D 实例保留质心协方差。"
+        },
+        "aabb": { "type": ["array", "null"], "minItems": 6, "maxItems": 6, "items": { "type": "number" } },
+        "obb": {
+          "type": ["object", "null"],
+          "required": ["center", "extent", "axes"],
+          "additionalProperties": false,
+          "properties": {
+            "center": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number" } },
+            "extent": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number", "minimum": 0 } },
+            "axes": {
+              "type": "array", "minItems": 3, "maxItems": 3,
+              "items": { "type": "array", "minItems": 3, "maxItems": 3, "items": { "type": "number" } }
+            }
+          },
+          "description": "由 geometry.oriented_bounding_box 计算。退化点集 MUST 为 null 而非填一个近似值。"
+        },
+        "height_above_ground_m": {
+          "type": ["number", "null"],
+          "description": "相对局部地面参考面的高度。C3 用。需同时记录所用的地面 surface_id。"
+        },
+        "ground_reference_surface_id": { "type": ["string", "null"] }
+      }
+    },
+
+    "point_support": {
+      "type": "object",
+      "required": ["point_count"],
+      "additionalProperties": false,
+      "description": "§14.8：稠密数组存 URI，不内联进 metadata JSON。",
+      "properties": {
+        "point_indices_uri": { "type": ["string", "null"] },
+        "point_count": { "type": "integer", "minimum": 0 },
+        "source_frames": { "type": "array", "items": { "type": "string" }, "default": [] }
+      }
+    },
+
+    "visibility": {
+      "type": "object",
+      "required": ["visible_frames"],
+      "additionalProperties": false,
+      "properties": {
+        "visible_frames": { "type": "array", "items": { "type": "string" } },
+        "visible_ratio": {
+          "type": ["number", "null"], "minimum": 0, "maximum": 1,
+          "description": "视锥内比例。**不含遮挡** —— 真正的可见性需射线求交，见 geometry.visible_ratio 的文档说明。"
+        },
+        "occlusion_ratio": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "best_view_frame_id": { "type": ["string", "null"] }
+      }
+    },
+
+    "confidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "§14.8/§27 G2：detector、mask、track、depth、关联置信度 MUST 分别保存，**不得压成单一分数**（错误码 CONFIDENCE_COMPONENTS_COLLAPSED）。",
+      "properties": {
+        "semantic": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "detector_box": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "mask": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "mask_boundary": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "geometry": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "association": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "cross_view_support": { "type": ["integer", "null"], "minimum": 0 },
+        "expert_disagreement": { "type": ["number", "null"], "minimum": 0 },
+        "calibrated": {
+          "type": "boolean", "default": false,
+          "description": "§14.13：是否已校准为错误事件概率。未校准的原始分数不得直接当概率使用。"
+        }
+      }
+    },
+
+    "lineage": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "§15：跨版本 ID 血缘。实体分裂/合并时记录，不得复用旧 ID。",
+      "properties": {
+        "merged_from": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "split_from": { "type": ["string", "null"] },
+        "previous_snapshot_id": { "type": ["string", "null"] }
+      }
+    },
+
+    "conflict": {
+      "type": "object",
+      "required": ["conflict_type", "entity_ids", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "conflict_type": { "enum": ["association_unresolved", "category_disagreement", "geometry_disagreement", "duplicate_candidate"] },
+        "entity_ids": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "reason": { "type": "string", "minLength": 1 },
+        "evidence": { "type": "object", "additionalProperties": true, "default": {} }
+      }
+    },
+
+    "entity_provenance": {
+      "type": "object",
+      "required": ["source_frames", "producers"],
+      "additionalProperties": true,
+      "description": "铁律 10。缺失即 G2 硬失败 MISSING_PROVENANCE。",
+      "properties": {
+        "source_frames": { "type": "array", "items": { "type": "string" } },
+        "producers": {
+          "type": "array", "minItems": 1,
+          "items": { "type": "string" },
+          "description": "产生该实体的模型/程序，指向 registry/experts/<id>.yaml 或 geometry 函数名。"
+        },
+        "derivation_program": { "type": ["string", "null"] },
+        "supervision_level": {
+          "enum": ["strong", "deterministic_derived", "filtered_pseudo", "weak", "language_generated"],
+          "description": "SPEC §42。强监督与程序派生适合做评测数据，其余原则上只进训练集。"
+        }
+      }
+    },
+
+    "provenance": {
+      "type": "object",
+      "required": ["created_at", "code_version", "l0_geometry_ref"],
+      "additionalProperties": true,
+      "properties": {
+        "created_at": { "type": "string", "minLength": 1 },
+        "code_version": { "type": "string", "minLength": 1 },
+        "l0_geometry_ref": { "type": "string", "minLength": 1 },
+        "notes": { "type": ["string", "null"] }
+      }
+    }
+  }
+}
