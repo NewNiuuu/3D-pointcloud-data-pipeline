@@ -118,6 +118,18 @@ _MIN_STRING_ATOM_LEN = 8
 #: 多远」。它与 ``task_spec_id`` 天然同名，若纳入原子会把每一条记录都误判为泄漏。
 _NON_ANSWER_KEYS = frozenset({"target_type", "unit", "answer_mode", "reason"})
 
+#: **身份字段**：其取值由 Task Spec 决定，在同类任务的所有样本上完全相同。
+#:
+#: 常量字段在信息论上不可能携带答案 —— 它对每个样本说同样的话。
+#: 但按命名约定，``task_spec_id``（如 ``3d_vqa.situated.observer_relative_direction``）
+#: 常常包含推导程序名或 target 类型名，从而与这两类原子**结构性撞名**。
+#: 实测已撞过两次：先是 ``target_type``（已由 :data:`_NON_ANSWER_KEYS` 排除），
+#: 后是 ``evidence.derivation_program``（2026-08-25）。
+#:
+#: 这些字段**必须对模型可见** —— 消费方要靠它知道这是什么任务。
+#: 故不参与**文本层**扫描；数值层与结构层不受影响。
+_IDENTITY_PATHS = frozenset({"task_spec_id", "adapter", "sample_id"})
+
 #: 后缀命中即视为**结构性索引**而非答案，不参与扫描。
 #:
 #: ``nearest_segment_index`` 是"答案落在折线第几段"的辅助定位，不是答案本身。
@@ -182,6 +194,8 @@ def scan_for_leakage(
     - ``exempt_paths`` 列出的**精确路径**不参与扫描 —— 用于标签与提示同文件的
       训练格式（如 3D-GRPO 的 ``gpt`` 轮）。豁免精确到路径，不放行整棵子树；
     - ``choices`` 子树不参与文本扫描 —— 单选题的正确答案必在选项之中；
+    - :data:`_IDENTITY_PATHS` 列出的**身份字段**不参与文本扫描 ——
+      它们在同类任务的所有样本上取值相同，常量不可能携带答案；
     - 短于 :data:`_MIN_STRING_ATOM_LEN` 的字符串不作原子 ——
       ``left`` / ``water`` 这类枚举值本就是合法词汇。
     """
@@ -206,6 +220,8 @@ def scan_for_leakage(
         if leaf in _FORBIDDEN_KEYS:
             findings.append(f"载荷含禁用键 {path!r}")
         if isinstance(value, str):
+            if leaf in _IDENTITY_PATHS:
+                continue                       # 身份字段：常量，不可能泄漏答案
             for atom in atoms:
                 if atom in value:
                     findings.append(f"{path!r} 的文本中出现隐藏目标片段 {atom!r}")

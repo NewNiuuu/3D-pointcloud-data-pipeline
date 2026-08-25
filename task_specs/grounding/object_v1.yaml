@@ -32,7 +32,10 @@ low_altitude_specificity:
     - low_altitude_scene_content
 
 required_scene_capabilities:
-  scale_status: metric        # 本 Spec 使用米制距离作为区分依据
+  # scale_status: 不作要求 —— target 是「距观察者最远」，是**序数**判定，
+  # 在均匀缩放下不变（DESIGN §40.5 机制 2）。2026-08-25 移除原来的 `metric` 要求：
+  # 那是旧「强制 metric」政策的遗留，与 T0–T4 分档设计矛盾，且会让
+  # relative 尺度的场景无谓地失去资格。
   geometry:
     - observer_position
     - entity_centroid
@@ -92,11 +95,13 @@ eligibility:
     - candidate_count_at_least: 3
     - target_visible_in_at_least_n_views: 1
     - all_candidates_have_valid_obb: true
-    - camera_baseline_m_at_least: 2.0    # 必要不充分条件。见 FINDINGS.md 附录 B
-                                         # 「重大修正」：该阈值无实证支持，仅用于排除
-                                         # 明显退化的轨迹，不构成尺度可信的依据
-    - domain_calibrated: true            # 唯一充分条件：尺度须经独立真值验证。
-                                         # 自洽检验不足（锚定后米制深度 CV 仍达 19.5%）
+    - parallax_ratio_at_least: 0.05    # **尺度无关**的基线充分性判据 = 基线/景深。
+                                       # 2026-08-25 替换原来的 camera_baseline_m_at_least: 2.0 ——
+                                       # 米制阈值在 relative 尺度场景里无从判定，且本任务的
+                                       # target 本就是尺度无关的（DESIGN §40.5 机制 2）。
+                                       # 阈值按实测定，见 FINDINGS「视差比」条。
+    # domain_calibrated: 不作要求 —— 那是**米制精度**的充分条件，
+    # 与尺度无关的 target 无关。2026-08-25 移除。
   reject_if:
     - geometry_confidence_below: 0.80
     - scale_recovery_degenerate: true      # 轨迹退化（近静止/纯旋转/相机共线）

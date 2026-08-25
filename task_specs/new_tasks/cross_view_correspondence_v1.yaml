@@ -35,7 +35,8 @@ low_altitude_specificity:
     # 航测航线预先规划，无主动视角决策）。见 SPEC §40.1。
 
 required_scene_capabilities:
-  scale_status: metric
+  # scale_status: 不作要求 —— target 是「是否同一实体」的**布尔判定**，
+  # 跨视角同一性在任何单调深度变换下保持（DESIGN §40.5 机制 2）。2026-08-25 移除。
   geometry:
     - entity_point_support
     - camera_poses

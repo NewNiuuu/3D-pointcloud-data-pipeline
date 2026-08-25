@@ -5,118 +5,279 @@
   "description": "把 L0/L1/L2（及可选 L3）绑成一个**不可变快照**。契约来源：SPEC §18 Scene Package、§23.4、§30 Artifact Lineage。\n\n**下游唯一该引用的东西是 metadata_snapshot_id**，不是散落的各层文件 —— 否则无法保证任务编译时读到的是同一份一致的 metadata。\n\n失败的版本 MUST 产生新快照而非原地覆盖（§23.4）。",
   "type": "object",
   "required": [
-    "schema_version", "snapshot_id", "scene_id", "dataset_id", "split_group_id",
-    "layers", "capabilities", "gate", "provenance"
+    "schema_version",
+    "snapshot_id",
+    "scene_id",
+    "dataset_id",
+    "split_group_id",
+    "layers",
+    "capabilities",
+    "gate",
+    "provenance"
   ],
   "additionalProperties": false,
-
   "properties": {
-    "schema_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
     "snapshot_id": {
-      "type": "string", "minLength": 1,
+      "type": "string",
+      "minLength": 1,
       "description": "形如 meta_<8位hex>。下游任务样本通过它引用 metadata，不直接引用各层文件路径。"
     },
     "parent_snapshot_id": {
-      "type": ["string", "null"],
+      "type": [
+        "string",
+        "null"
+      ],
       "description": "重生成时指向上一版。§30：修复必须产生新 artifact，禁止静默覆盖。"
     },
-    "scene_id": { "type": "string", "minLength": 1 },
-    "dataset_id": { "type": "string", "minLength": 1 },
+    "scene_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "dataset_id": {
+      "type": "string",
+      "minLength": 1
+    },
     "split_group_id": {
-      "type": "string", "minLength": 1,
+      "type": "string",
+      "minLength": 1,
       "description": "铁律 11：同组 MUST 绑定同一 split。UAVScenes 中同地点的 _GNSS / _Evening 变体属同一组。"
     },
-
     "layers": {
       "type": "object",
-      "required": ["l0_geometry", "l1_entities", "l2_relations"],
+      "required": [
+        "l0_geometry",
+        "l1_entities",
+        "l2_relations"
+      ],
       "additionalProperties": false,
       "properties": {
-        "l0_geometry":  { "$ref": "#/$defs/layer_ref" },
-        "l1_entities":  { "$ref": "#/$defs/layer_ref" },
-        "l2_relations": { "$ref": "#/$defs/layer_ref" },
+        "l0_geometry": {
+          "$ref": "#/$defs/layer_ref"
+        },
+        "l1_entities": {
+          "$ref": "#/$defs/layer_ref"
+        },
+        "l2_relations": {
+          "$ref": "#/$defs/layer_ref"
+        },
         "l3_capability": {
-          "oneOf": [{ "$ref": "#/$defs/layer_ref" }, { "type": "null" }],
+          "oneOf": [
+            {
+              "$ref": "#/$defs/layer_ref"
+            },
+            {
+              "type": "null"
+            }
+          ],
           "description": "C1–C4 能力字段。**Release A 不要求**（SPEC §16：首版只实现所选任务需要的 L3 字段）。缺失时为 null，MUST NOT 省略该键 —— 显式的 null 与遗漏是两回事。"
         }
       }
     },
-
     "capabilities": {
       "type": "object",
-      "required": ["scale_status", "depth_type", "metric_task_eligible", "reasons"],
+      "required": [
+        "scale_status",
+        "depth_type",
+        "metric_task_eligible",
+        "reasons"
+      ],
       "additionalProperties": false,
       "description": "**本快照支持哪些任务** —— 由 Task Spec 的 required_scene_capabilities 直接比对。\n把资格判定固化在 metadata 里，而不是每次编译任务时重新推断。",
       "properties": {
-        "scale_status": { "enum": ["metric", "relative", "unknown"] },
-        "depth_type": { "enum": ["metric", "externally_anchored", "relative", "affine_invariant", "pseudo"] },
+        "scale_status": {
+          "enum": [
+            "metric",
+            "relative",
+            "unknown"
+          ]
+        },
+        "depth_type": {
+          "enum": [
+            "metric",
+            "externally_anchored",
+            "relative",
+            "affine_invariant",
+            "pseudo"
+          ]
+        },
         "metric_task_eligible": {
           "type": "boolean",
           "description": "是否有资格产出**绝对米制目标**。铁律 8/9 的可执行形式。\ntrue 要求：depth_type ∈ {metric, externally_anchored} **且** 对应的 domain_calibrated / anchor_provenance_verified 为 true。\n仅有 scale_status=metric **不足以**置 true。"
         },
         "available_entity_types": {
           "type": "array",
-          "items": { "enum": ["object", "surface", "region"] },
+          "items": {
+            "enum": [
+              "object",
+              "surface",
+              "region"
+            ]
+          },
           "default": [],
           "description": "本快照实际含有的实体类型。C2/C3 任务需要 surface，缺失则不具备资格。"
         },
-        "camera_baseline_m": { "type": ["number", "null"], "minimum": 0 },
-        "nadir_angle_median_deg": { "type": ["number", "null"] },
+        "camera_baseline_m": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "nadir_angle_median_deg": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
         "depth_relief_ratio": {
-          "type": ["number", "null"], "minimum": 0,
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
           "description": "深度起伏比。过低（接近 1）的场景不适合出 C3 地形推理题 —— 航拍近垂直下视普遍偏低（实测约 1.13）。"
         },
         "reasons": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "description": "**每个为 false 的资格位都 MUST 在此给出理由。** 便于排查『为什么这个场景没生成任务』，避免静默丢弃。",
           "default": []
+        },
+        "parallax_ratio": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "**尺度无关的基线充分性判据** = 相机平移跨度 / 中位景深。\n\n`camera_baseline_m` 只在 metric 场景可得；relative 场景（视觉重建未做米制锚定）下无从判定，但基线够不够本来就取决于**视差**而非绝对米数。\n\n实测分离度良好（2026-08-25，VGGT-Ω 12 帧）：起飞悬停段 0.0115；正常航测段 0.117 / 0.240 / 0.324。阈值 0.05 落在两者之间的空档。"
+        },
+        "entity_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "本快照的 L1 实体总数。供 minimum_candidates 一类的资格条件快速判定。"
         }
       }
     },
-
     "gate": {
       "type": "object",
-      "required": ["status", "gate_id"],
+      "required": [
+        "status",
+        "gate_id"
+      ],
       "additionalProperties": false,
       "description": "SPEC §31：状态迁移 MUST 携带门禁报告，仅有状态标签不足。",
       "properties": {
-        "gate_id": { "enum": ["G0", "G1", "G2", "G3", "G4", "G5", "G6"] },
-        "status": { "enum": ["pass", "warn", "quarantine", "reject"] },
-        "error_codes": { "type": "array", "items": { "type": "string" }, "default": [] },
-        "warnings": { "type": "array", "items": { "type": "string" }, "default": [] },
-        "report_uri": { "type": ["string", "null"] }
+        "gate_id": {
+          "enum": [
+            "G0",
+            "G1",
+            "G2",
+            "G3",
+            "G4",
+            "G5",
+            "G6"
+          ]
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "warn",
+            "quarantine",
+            "reject"
+          ]
+        },
+        "error_codes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "report_uri": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     },
-
     "provenance": {
       "type": "object",
-      "required": ["created_at", "code_version", "schema_versions"],
+      "required": [
+        "created_at",
+        "code_version",
+        "schema_versions"
+      ],
       "additionalProperties": true,
       "properties": {
-        "created_at": { "type": "string", "minLength": 1 },
-        "code_version": { "type": "string", "minLength": 1 },
+        "created_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "code_version": {
+          "type": "string",
+          "minLength": 1
+        },
         "schema_versions": {
           "type": "object",
-          "additionalProperties": { "type": "string" },
+          "additionalProperties": {
+            "type": "string"
+          },
           "description": "各层 schema 的版本。**schema 升版后旧快照仍可被正确解读** —— 这是冻结 schema 的意义所在。"
         },
-        "input_digests": { "type": "object", "additionalProperties": { "type": "string" }, "default": {} },
-        "notes": { "type": ["string", "null"] }
+        "input_digests": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        },
+        "notes": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
       }
     }
   },
-
   "$defs": {
     "layer_ref": {
       "type": "object",
-      "required": ["uri", "schema_version", "content_sha256"],
+      "required": [
+        "uri",
+        "schema_version",
+        "content_sha256"
+      ],
       "additionalProperties": false,
       "properties": {
-        "uri": { "type": "string", "minLength": 1 },
-        "schema_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+        "uri": {
+          "type": "string",
+          "minLength": 1
+        },
+        "schema_version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$"
+        },
         "content_sha256": {
-          "type": "string", "pattern": "^[0-9a-f]{64}$",
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
           "description": "内容摘要。快照不可变的技术保证 —— 任一层文件被改动，摘要即不匹配。"
         }
       }

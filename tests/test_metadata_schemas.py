@@ -164,6 +164,7 @@ def snapshot():
             "metric_task_eligible": True,
             "available_entity_types": ["object", "surface", "region"],
             "camera_baseline_m": 3.7,
+            "parallax_ratio": 0.30,      # 尺度无关的基线充分性（>= 0.05 即合格）
             "nadir_angle_median_deg": 87.6,
             "reasons": [],
         },

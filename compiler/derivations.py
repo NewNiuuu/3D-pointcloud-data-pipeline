@@ -144,8 +144,16 @@ def select_referent_program(ctx: dict[str, Any]) -> tuple:
     ranked = sorted(((eid, float(np.linalg.norm(np.asarray(p) - o)))
                      for eid, p in cands), key=lambda x: -x[1])
     target_id, far = ranked[0]
-    # 与次远的差距过小则不可分辨
-    ambiguous = len(ranked) > 1 and abs(far - ranked[1][1]) < 1.0
+
+    # 与次远的差距过小则不可分辨。**判据必须是相对的** ——
+    # 本任务是序数判定，可在 relative 尺度的场景上运行（DESIGN §40.5 机制 2），
+    # 那里「米」没有定义。2026-08-25 修正：原为写死的 `< 1.0`（米），
+    # 在 VGGT 相对尺度下（中位景深≈1）会把**几乎所有样本判成歧义**，实测确认。
+    # 现按最远距离的比例判定，任何尺度下含义一致。
+    rel_margin = float((ctx["spec"].raw.get("quality_requirements") or {})
+                       .get("ordinal_margin_ratio", 0.05))
+    ambiguous = (len(ranked) > 1
+                 and abs(far - ranked[1][1]) < rel_margin * max(far, 1e-9))
 
     return (
         {"target_type": "grounding", "object_id": target_id},
@@ -153,7 +161,8 @@ def select_referent_program(ctx: dict[str, Any]) -> tuple:
          "derivation_inputs": {"observer_position": list(observer),
                                "predicate": "farthest_from_observer"}},
         {"is_ambiguous": ambiguous,
-         "reason": "最远与次远差距不足 1 m" if ambiguous else None,
+         "reason": (f"最远与次远的差距不足最远距离的 {rel_margin:.0%}"
+                    if ambiguous else None),
          "equivalent_answers": [target_id, ranked[1][0]] if ambiguous else []},
     )
 

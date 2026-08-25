@@ -42,6 +42,90 @@
 
 ## 2026-08-25
 
+### `[实现]` 第一条真实端到端管线跑通 + R-43 首次 3D 增益实测 — Agent
+
+**背景**：R-43 的真正阻塞不是 Qwen，是**没有真实场景的 L1 metadata** ——
+编译器此前只在合成 fixture 上跑过。本次把最小真实抽取链打通。
+
+**新增 `pipeline/extract.py`**（L2-S1 + L2-S3 的最小实现）：
+
+- **L0**：VGGT-Ω 自洽坐标系，`scale_status=relative`。**主动不做米制锚定** ——
+  实测锚定后 CV 仍 19.5%（FINDINGS 附录 B），拿它出米制题是伪精度。
+  按 §40.5 机制 5 静默降级，由 `metric_task_eligible=False` 自动关掉米制任务；
+- **L1**：数据集自带逐像素语义标注的连通域 → 深度反投影成实体。
+  无需相机-LiDAR 外参（M-008）；
+- 跨帧做了**粗**质心归并（无此步则 12 帧出 33 个 water，候选退化）。
+  这不是 L2-S3 的真实融合，血缘里如实标注；
+- **踩到 VGGT-Ω 的一个接口事实**：它不直接输出 extrinsic/intrinsic，
+  只给 9 维 `pose_enc`，需 `encoding_to_camera` 显式解码。
+
+**产出**：9 个场景 → 14 条真实任务样本，全部通过 schema 与泄漏检查。
+2 个退化场景（起飞悬停）被**带理由拒绝**，不是静默丢弃。
+
+**R-43 首次实测**（新增 `scripts/measure_3d_lift.py`，三档消融 × 3 次）：
+
+| | 2D-only | 2D+metadata | 打乱 metadata | lift | 净增益 |
+|---|---:|---:|---:|---:|---:|
+| Grounding（序数「最远」） | 0.286 | **0.571** | **0.143** | **+0.286** | **+0.429** |
+| 方位（排除歧义） | 1.000 | 1.000 | 0.167 | 0.000 | +0.833 |
+| 合计 42 次/档 | 0.286 | 0.429 | 0.095 | +0.143 | +0.333 |
+
+**最有价值的一条是 arm c 掉到 a 以下**：喂错误几何时模型答得比什么都不给还差，
+说明它**确实在读几何**。只比 b vs a 看不出这一点 —— §29.2 设计 arm c 的理由得到实证。
+
+**⚠ 14 条样本远不够 §29.1 的准入判定。** 本轮结论仅限「测量管线通了」。
+
+### `[修正]` 尺度无关任务里的四处米制常数 — Agent
+
+实测暴露：三个 Task Spec 要求 `scale_status: metric`、`camera_baseline_m_at_least: 2.0`、
+`domain_calibrated: true`；`select_referent_program` 写死「差距不足 **1 m** 判歧义」。
+
+但 grounding 的「最远」是**序数**、方位是**角度**、跨视角同一性是**布尔** ——
+均匀缩放下都不变，本就不需要米制。这是「强制 metric」政策的遗留（该政策已于同日改为 T0–T4 分档）。
+
+**后果分两种，第二种更危险**：前三条让 relative 场景全部失去资格（有报错）；
+最后一条在 VGGT 相对尺度下（中位景深≈1）把**几乎每条样本标成歧义** ——
+**不报错、照常产出，全是废样本**。
+
+**处置**：
+
+- 三个 spec 移除 `scale_status`/`domain_calibrated` 要求，
+  `camera_baseline_m_at_least` 换成**尺度无关的 `parallax_ratio_at_least: 0.05`**；
+- `select_referent_program` 的歧义判据改为相对比例（默认 5%）；
+- `metadata_snapshot.schema.json` 的 `capabilities` 新增 `parallax_ratio` 与 `entity_count`。
+
+**阈值是实测定的**，不是猜的：起飞悬停 0.0115 vs 正常航测 0.117/0.240/0.324/0.412/0.469，
+中间有 10 倍间隙，0.05 落在空档。
+
+### `[修正]` 泄漏假阳（第三次）：身份字段与推导程序名撞车 — Agent
+
+`evidence.derivation_program = "observer_relative_direction"` 与
+`task_spec_id = "3d_vqa.situated.observer_relative_direction@0.1.0"` **结构性撞名**，
+被判为泄漏，整批方位样本渲染失败。
+
+**判据是信息论的**：`task_spec_id` 在同类任务的所有样本上取值相同，
+**常量不可能携带答案信息**。新增 `_IDENTITY_PATHS`（`task_spec_id`/`adapter`/`sample_id`）
+不参与**文本层**扫描；数值层与结构层不变。
+
+**已补回归测试**（这类假阳咬过三次：`target_type`、短枚举、推导程序名），
+并同时测「问题文本里真写了答案数值仍必须报」，确保豁免没开太大。
+
+### `[修正]` 方位任务在 nadir 数据上退化 — Agent
+
+实测发现：相机朝下，**几乎所有实体都在「前方」**，longitudinal 恒为 front，
+题目退化成左右二选一；且 6/7 条样本落在横向死区被 checker 判负（设计如此）。
+**该任务在本数据集上的有效样本率约 14%。**
+
+这不是实现 bug，是**任务与数据几何的错配**，已记入 FINDINGS。
+grounding 的序数题没有这个问题 —— 它测的正是 nadir 下最缺的深度序关系。
+
+**涉及文件**：新增 `pipeline/`（`extract.py`、`__init__.py`）、
+`scripts/measure_3d_lift.py`、`scripts/recompile_tasks.py`；
+改 `compiler/derivations.py`、`task_adapters/base.py`、
+`schemas/metadata_snapshot.schema.json`、3 个 task_spec、2 个测试文件；
+`docs/FINDINGS.md` 新增「3D 增益」一节。测试 231 → **233 通过**。
+
+
 ### `[决策]` `[运维]` Qwen3.5-35B-A3B 部署完成，R-20 解禁、R-43 阻塞解除 — 用户 + Agent
 
 **用户裁决**：面对「R-20 暂缓调模型」与「R-43 要求实测 3D 增益」的冲突，

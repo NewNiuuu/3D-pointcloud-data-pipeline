@@ -255,3 +255,47 @@ class TestMcqQuestionStillScanned:
     def test_clean_mcq_question_passes(self, mcq_record):
         out = PointcloudNativeAdapter().render(mcq_record)
         assert out.payload["conversations"][1]["value"] == "B"
+
+
+class TestIdentityFieldFalsePositives:
+    """身份字段与 target/推导程序**结构性撞名**时不得判为泄漏。
+
+    这类假阳已经咬过三次（2026-08-25 记录）：
+
+    1. ``target_type`` 的值出现在 ``task_spec_id`` 里 —— 由 ``_NON_ANSWER_KEYS`` 排除；
+    2. 短枚举（``left`` / ``water``）被当成答案片段 —— 由 ``_MIN_STRING_ATOM_LEN`` 排除；
+    3. ``evidence.derivation_program`` 的名字出现在 ``task_spec_id`` 里 ——
+       由 ``_IDENTITY_PATHS`` 排除（本测试）。
+
+    判据是信息论的：**身份字段在同类任务的所有样本上取值相同，
+    常量不可能携带答案信息。**
+    """
+
+    def test_derivation_program_name_in_task_spec_id_is_not_leakage(self):
+        from task_adapters.base import scan_for_leakage
+
+        payload = {
+            "task_spec_id": "3d_vqa.situated.observer_relative_direction@0.1.0",
+            "question": "Where is the region relative to the drone?",
+        }
+        hidden = {"target_type": "observer_relative_direction",
+                  "longitudinal": "front", "lateral": "left",
+                  "lateral_angle_deg": -23.1459}
+        evidence = {"derivation_program": "observer_relative_direction",
+                    "used_entities": [], "used_fields": []}
+
+        assert scan_for_leakage(payload, hidden, evidence) == []
+
+    def test_real_answer_value_in_question_is_still_caught(self):
+        """豁免只针对身份字段 —— 问题文本里写了答案仍然必须报。"""
+        from task_adapters.base import scan_for_leakage
+
+        payload = {
+            "task_spec_id": "3d_vqa.situated.observer_relative_direction@0.1.0",
+            "question": "The lateral angle is -23.1459 degrees; where is it?",
+        }
+        hidden = {"target_type": "observer_relative_direction",
+                  "lateral_angle_deg": -23.1459}
+        findings = scan_for_leakage(payload, hidden, None)
+        assert findings, "问题文本含答案数值，必须判为泄漏"
+        assert any("question" in f for f in findings)

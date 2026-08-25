@@ -68,6 +68,7 @@ def scene():
                 "metric_task_eligible": True,
                 "available_entity_types": ["object", "surface", "region"],
                 "camera_baseline_m": 12.0,
+                "parallax_ratio": 0.30,      # 尺度无关的基线充分性（>=0.05 即合格）
                 "nadir_angle_median_deg": 87.6,
                 "depth_relief_ratio": 1.15,
                 "reasons": [],
