@@ -87,12 +87,18 @@ eligibility:
   require_all:
     - observer_forward_available: true
     - entity_centroid_available: true
-    - camera_baseline_m_at_least: 2.0    # 见 docs/SCALE_RECOVERY_ANALYSIS.md：
-                                         # 基线 0.15 m 时尺度误差达 77%，3.70 m 时 0.5%
+    - camera_baseline_m_at_least: 2.0    # 必要不充分条件。见 SCALE_RECOVERY_ANALYSIS.md
+                                         # 「重大修正」：该阈值无实证支持，仅用于排除
+                                         # 明显退化的轨迹，不构成尺度可信的依据
+    - domain_calibrated: true            # 唯一充分条件：尺度须经独立真值验证。
+                                         # 自洽检验不足（锚定后米制深度 CV 仍达 19.5%）
   reject_if:
     - geometry_confidence_below: 0.80
-    - scale_recovery_degenerate: true      # 轨迹退化（近静止/纯旋转/相机共线）；
-                                           # 判据是基线与构型，**不是**对齐残差
+    - scale_recovery_degenerate: true      # 轨迹退化（近静止/纯旋转/相机共线）
+                                           # 判据是基线、帧数与构型，**不是**对齐残差
+                                           # （2 帧时残差恒为 0 而尺度误差可达 460%）
+    - reconstruction_scale_unstable: true  # 同帧在不同窗口下米制深度不一致；
+                                           # 阈值待 VGGT-Ω 实测后确定
     - lateral_angle_within_deadzone: true    # 死区内左右无稳定真值
     - target_coincides_with_observer: true
     - observer_forward_parallel_to_up: true
