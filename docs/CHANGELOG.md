@@ -42,6 +42,72 @@
 
 ## 2026-08-25
 
+### `[修正]` 专家调研只搜 HF 导致误报「不存在」 — 用户提供的 ChatGPT 调研触发复查
+
+**用户给了一份 ChatGPT 做的专家模型调研作参考**，并明确「不一定按它说的走，
+按我们商议的结果和你现在对项目的理解走」。据此**批判性采纳**：
+
+**采纳的部分**（可核验的具体线索）：
+
+- 它指出 PowerLine-MTYOLO 与 TTPLA 有 checkpoint —— **这直接推翻了我上一轮的结论**；
+- 许可证雷区清单（SAM3 自定义许可、SegFormer 仅研究、DSINE 非商业、
+  UFM checkpoint CC BY-NC-SA、DAM 权重 NVIDIA Noncommercial）；
+- Metric3Dv2 官方 FAQ 自承 aerial/BEV 训练分布不足 —— 具体、可查、与我们相关。
+
+**未采纳的部分**（与既定设计冲突）：
+
+- 它的「首版最小专家组合」列了 10 个模型。按 §0.3 反向证成规则，
+  其中属性/caption（Florence-2、RAM++、DAM）服务的是 **Release C（已推迟）**，
+  change detection 我们**已决定用 3D scene graph 差分**（它自己也这么建议）。
+  一次接 10 个模型里有几个**指不出当前的消费方**，不该进；
+- 它建议 Grounded-SAM-2 做首版实例主链路。我们选 OneFormer 是因为
+  **航拍主体是 stuff 不是 things** —— 这一点它的 P0-D 节其实也同意。
+  Grounded-SAM2 等到做可数物体的 grounding 时再justify。
+
+**复查结果 —— 我上一轮错了**：
+
+首轮调研**只搜了 HuggingFace**，命中全是 0 下载量习作，于是写下
+「生态里没有可用的预训练专家」。**实际上 PowerLine-MTYOLO 把 6.0 MB 的
+checkpoint 直接放在 GitHub 仓库根目录**，README 明写 AGPL-3.0
+（GitHub API 检测不到是因为仓库没有 LICENSE 文件）。
+
+**教训**：**UAV / 遥感这类小众领域的模型大量只发在 GitHub 与论文主页，不上 HF。**
+只搜 HF 会把「我没找到」误报成「不存在」，而这个误报直接影响排期判断。
+已写进 §46.6：检索面 MUST 包含 GitHub 与论文主页。
+
+### `[实现]` PowerLine-MTYOLO 核验：有权重，但不能直接部署 — Agent
+
+下载（6.0 MB，sha256 `4b67f43d…`）后实测：
+
+**用官方 ultralytics 8.4.128 加载直接抛 `AttributeError`** ——
+checkpoint 里 pickle 了 `ultralytics.nn.tasks.MultiModel`，
+该类只存在于 **A-YOLOM 的分叉版**（`JiayuanWang-JW/YOLOv8-multi-task`，AGPL-3.0，400 星）。
+而 PowerLine-MTYOLO 仓库根目录**只有 README 与那个 .pt，不含代码**。
+
+**「有 checkpoint」≠「能部署」。** 权重能下、大小正常、sha256 能记 ——
+看起来「准备好了」，但必须**真的加载起来跑一次**才算数。
+已把这条写进 §46.6 准备清单的第 3 项。
+
+**接入成本因此不在训练，在运行时集成**：要引入一个分叉的 ultralytics
+并与现有 torch 2.8 / numpy 1.26 共存，很可能需要独立 env（与 `nyp-moge` 同理）。
+
+**新增 M-011 待你决策**：AGPL-3.0 是**强 copyleft 且带网络条款**。
+用它产出数据、或接进对外提供服务的管线，法律影响需用户判断。
+**决定之前不接入**，免得事后要拆。不阻塞主干（R-30 本就在 backlog）。
+
+**顺带核实的事实**：TTPLA 原仓库是 **Apache-2.0**（HF 镜像只标 `other`），
+但**仓库只有数据没有权重**（只有 `scripts/` 与 `splitting_dataset_txt/`）；
+空中目标按同样方法复查（HF + GitHub），**负面结论仍成立** —— HF 仅 2 命中且下载量为 0。
+
+**环境安全**：ultralytics 用 `--no-deps` + 显式钉版本安装
+（`opencv-python-headless>=4.7,<4.13`），装前装后 numpy 均为 1.26.4，
+VGGT-Ω 导入正常，233 项测试通过 —— 没有重蹈上次 opencv 把 numpy 拉到 2.x 的覆辙。
+
+**涉及文件**：新增 `registry/experts/powerline_mtyolo_nano.yaml`；
+改 `registry/experts/{thin_structure_detector,airborne_object_detector}.yaml`（加 correction 段）、
+`docs/DESIGN.md` §46.6、`docs/FINDINGS.md`、`docs/USER_ACTIONS.md`（M-011）。
+
+
 ### `[需求]` `[决策]` 「不生成任务」≠「不准备提取能力」 — 用户
 
 **用户指出 §40.1 的表述有缺口**：

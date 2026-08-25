@@ -1,0 +1,61 @@
+# Expert Card: PowerLine-MTYOLO Nano —— 电力线分割 + 断股检测
+# Contract: DESIGN.md §23.2 / §46.6 提前准备清单
+# 核验日期: 2026-08-25
+
+expert_id: powerline_mtyolo_nano
+display_name: PowerLine-MTYOLO Nano
+card_version: 0.1.0
+role: powerline_cable_segmentation_and_broken_strand
+spec_ref: DESIGN §14.6（薄障碍证据规则）
+research_tier: A1
+deployment_status: blocked_needs_forked_runtime
+
+serves_backlog:
+  - R-30  # 薄障碍检测与中心线
+
+sources:
+  repo: https://github.com/phd-benel/PowerLine-MTYOLO
+  weights_direct: https://raw.githubusercontent.com/phd-benel/PowerLine-MTYOLO/main/PowerLine-MTYOLO-NANO-150Epochs.pt
+  local: model_cache/powerline/PowerLine-MTYOLO-NANO-150Epochs.pt
+  size_bytes: 6188788
+  sha256_prefix: 4b67f43db483db11fffd7433
+  trained_on: MPCD（UAV 电力巡检；论文称 1871 图 / 2501 cable masks）
+
+license:
+  code: AGPL-3.0        # README 明写；GitHub API 检测不到是因为仓库无 LICENSE 文件
+  weights: AGPL-3.0（随代码）
+  gated: false
+  # ⚠ AGPL-3.0 是**强 copyleft 且带网络条款**。用它产出数据、或把它接进
+  #   对外提供服务的管线，法律影响需用户判断 —— 已登记为 USER_ACTIONS 的 M-011。
+  decision_required: true
+  verified_at: '2026-08-25'
+
+# ---- 部署核验（这一步救了后面的时间）----
+deployment_investigation:
+  date: '2026-08-25'
+  finding: >
+    权重能下载（6.0 MB），但**用官方 ultralytics 加载失败**：
+    checkpoint 里 pickle 了 `ultralytics.nn.tasks.MultiModel`，
+    该类不存在于上游 ultralytics 8.4.128。
+    PowerLine-MTYOLO 建构于 **A-YOLOM**（YOLOv8 多任务分叉），
+    因此运行需要作者链路上的**分叉版 ultralytics**，不是 pip 上的官方包。
+  repo_contents: >
+    仓库根目录**只有 README.md 与那个 .pt**，**不含代码** ——
+    README 指向 Google Drive 上的 Colab notebook。
+  required_runtime:
+    repo: https://github.com/JiayuanWang-JW/YOLOv8-multi-task
+    license: AGPL-3.0
+    stars: 400
+    last_push: '2025-11-17'
+  implication: >
+    「有 checkpoint」≠「能部署」。接入成本 = 引入一个分叉的 ultralytics
+    并与本项目现有 torch 2.8 / numpy 1.26 环境共存，**很可能需要独立 env**
+    （与 nyp-moge 同理）。排期须按这个算，不能按「下个权重跑一跑」。
+
+preparation_checklist:
+  license_verified: true            # AGPL-3.0，但**是否可用需用户决策**
+  weights_obtainable: true          # 已下载并记 sha256
+  deployment_verified: false        # 需分叉 runtime
+  io_contract_measured: false
+
+uav_validation_status: not_started

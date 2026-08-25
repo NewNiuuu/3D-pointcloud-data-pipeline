@@ -2680,12 +2680,17 @@ Mid-Air / FlyAwareV2 / UAVStereo，均需重新做许可与可行性核验）。
 
 | 能力 | 需要的专家 | 状态 | 服务的 backlog 项 |
 |---|---|---|---|
-| **薄结构检测**（电线/缆索/细枝） | —— | 🔴 **调研完成：生态里没有可用的预训练专家** | R-30、R-31 |
-| **空中飞行器感知**（无人机/有人机/鸟） | —— | 🔴 **同上** | R-34、R-35 |
+| **薄结构检测**（电线/缆索/细枝） | PowerLine-MTYOLO Nano | 🟡 **权重已下载，但需分叉 runtime**；许可 AGPL-3.0 待用户决策（M-011） | R-30、R-31 |
+| **空中飞行器感知**（无人机/有人机/鸟） | —— | 🔴 **确无可用预训练专家**（HF/GitHub 均已查） | R-34、R-35 |
 | 语义分割（stuff） | OneFormer ADE20K | ✅ 已部署验证（加载告警已证无害） | C2、C3、L1 实体 |
 | 开放词汇检测 | Grounding DINO | ✅ 已部署验证 | grounding |
 | 实例掩码与视频传播 | SAM 2.1 | ✅ 已部署验证 | 实例级实体 |
 | 光流与动态证据 | SEA-RAFT | ⬜ 权重不在 HF | R-38 自洽测量、R-34 |
+
+**检索面 MUST 包含 GitHub 与论文主页，不能只搜 HuggingFace。**
+2026-08-25 实测教训：首轮只搜 HF，得出「薄结构没有可用专家」的结论；
+实际上 PowerLine-MTYOLO **把 checkpoint 直接放在 GitHub 仓库根目录**。
+**UAV / 遥感这类小众领域的模型大量只发在 GitHub**，只搜 HF 会系统性漏掉。
 
 **准备工作 MUST 包含四项**，缺一不算「已准备」：
 
@@ -2695,6 +2700,12 @@ Mid-Air / FlyAwareV2 / UAVStereo，均需重新做许可与可行性核验）。
    （OneFormer 曾「能跑但疑似加载错误」，验了才知道无害）；
 4. **输出契约实测** —— 实际给哪些字段，不能只看任务名
    （DA3Metric 有米制深度但 `conf`/`extrinsics`/`intrinsics` 全是 `None`）。
+
+**第 3 项尤其容易被跳过。** 实测教训（2026-08-25）：PowerLine-MTYOLO 的权重
+能下载、大小正常、sha256 可记，看起来「准备好了」——
+但**用官方 ultralytics 加载直接抛 `AttributeError`**：
+checkpoint 里 pickle 了分叉版才有的 `MultiModel` 类。
+**「有 checkpoint」≠「能部署」**，必须真的把它加载起来跑一次才算数。
 
 **MUST NOT 在准备阶段就放宽标准**：专家卡的 `deployment_status` 只有
 `deployed_verified` 才算数，`blocked` / `deployed_with_warning` 都要写清原因。

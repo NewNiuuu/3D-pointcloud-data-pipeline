@@ -8,7 +8,7 @@ card_version: 0.1.0
 role: thin_obstacle_mask_and_centerline
 spec_ref: DESIGN §14.6（薄障碍证据规则，已就绪待启用）
 research_tier: A0
-deployment_status: not_available          # 不是「没做」，是「查过，生态里没有」
+deployment_status: superseded             # 见下方 correction；已由 powerline_mtyolo_nano 具体化
 
 # ---- 为什么现在就建卡（§40.1 的说明框）----
 # 用户 2026-08-25 指出：「不在本数据集生成任务」≠「不准备提取能力」。
@@ -20,13 +20,27 @@ serves_backlog:
   - R-31  # 前向避障、通道净空
 
 # ---- 调研结论 ----
+# ⚠ 2026-08-25 当日更正：下面这条结论**不成立**
+correction:
+  date: '2026-08-25'
+  what_was_wrong: >
+    首版结论写「没有可直接使用的预训练专家模型」。**该结论只搜了 HuggingFace。**
+    实际上 PowerLine-MTYOLO 在 **GitHub 仓库里直接放了 checkpoint**
+    （`PowerLine-MTYOLO-NANO-150Epochs.pt`，6.0 MB，AGPL-3.0）。
+  lesson: >
+    **UAV / 遥感这类小众领域的模型大量只发在 GitHub，不上 HuggingFace。**
+    只搜 HF 会系统性漏掉它们。专家调研的检索面必须包含 GitHub 与论文主页。
+  but_still_true: >
+    「有 checkpoint」不等于「能部署」—— 该权重需要**分叉版 ultralytics** 才能加载，
+    详见 `powerline_mtyolo_nano.yaml`。所以「准备 = 比下载更重」这个判断依然成立，
+    只是原因不同：不是没权重，是运行时不通用。
+
 survey:
   date: '2026-08-25'
   conclusion: >
-    **没有可直接使用的预训练专家模型。** HuggingFace 上以 powerline /
-    transmission line / cable / wire 检索，命中的全是 0 下载量的个人习作；
-    检索 "ttpla" 命中的是同名但无关的 Stable Diffusion ControlNet（TTPlanet）。
-    生态里现成的是**数据集**，不是**专家**。
+    HuggingFace 上检索不到可用的薄结构专家（命中项均为 0 下载量个人习作；
+    搜 "ttpla" 命中的是同名无关的 Stable Diffusion ControlNet）。
+    **但 GitHub 上有** —— 见上方 correction。
   implication: >
     因此「准备这个专家」不是「下载并测试」，而是「拿公开数据集微调一个检测器」——
     工作量显著更大。这一点必须在排期时说清楚，不能按「下个模型跑一跑」估。
@@ -37,7 +51,8 @@ survey:
       code: https://github.com/r3ab/ttpla_dataset
       hf_mirror: https://huggingface.co/datasets/grantmwilkinson/epri-transmission-ttpla
       hf_gated: false
-      license: 'other —— **需人工核验**，HF 标签只写 other，未给具体条款'
+      license: 'HF 镜像标 other；**原仓库 r3ab/ttpla_dataset 是 Apache-2.0**（已核验）'
+      has_weights: false    # 实测：仓库只有 scripts/ 与 splitting_dataset_txt/，无 checkpoint
       note: 该镜像标 1242 张（原论文 1100），疑为扩展版，用前需比对
   why_hard: >
     薄结构本身就是检测难点：像素占比极小、长细比极大、常与背景低对比。
