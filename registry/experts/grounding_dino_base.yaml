@@ -1,10 +1,10 @@
 # Expert Card: Grounding DINO Base
 # Contract: DESIGN.md §23.2 (expert-registry-manager)
-# 核验日期: 2026-08-24
+# 核验日期: 2026-08-24（部署）/ 2026-08-25（UAV 负控标定）
 
 expert_id: grounding_dino_base
 display_name: Grounding DINO Base
-card_version: 0.1.0
+card_version: 0.2.0
 role: open_vocabulary_detection_proposals
 spec_ref: SPEC §14.1 Grounded-SAM-2 的检测端
 research_tier: A0
@@ -17,23 +17,66 @@ license:
   gated: false
   training_allowed: true
   evaluation_only: false
-  verified_at: '2026-08-24'
+  verified_at: '2026-08-25'
+  verified_via: GitHub API /repos/IDEA-Research/GroundingDINO/license
 io_contract:
-  entry: transformers.AutoModelForZeroShotObjectDetection
+  entry: pipeline.grounded_sam.GroundedSAM.detect
   outputs:
-    boxes: (K,4) xyxy
-    scores: (K,)
-    text_labels: list[str]
-  note: SPEC §14.1 强制：detector box/class 置信度与 SAM mask 置信度必须分别保存；不得把框内像素整体提升到 3D
+    boxes: (K,4) xyxy 原图像素坐标
+    scores: (K,) 短语级得分
+    labels: list[str] 保证是提示词表里的原短语
+  note: >-
+    SPEC §14.1 强制：detector box/class 置信度与 SAM mask 置信度必须分别保存；
+    不得把框内像素整体提升到 3D。
+  must_not_use: >-
+    transformers 的 post_process_grounded_object_detection 取标签。
+    它走 get_phrases_from_posmap，把该 query 上所有过阈值的 token 直接拼接，
+    完全不管短语边界；12 条提示词同送时实测产出 "a car a" / "a truck bus" / "a"
+    这类碎片（2026-08-25）。本项目改用短语 token span argmax 归属，
+    见 pipeline/grounded_sam.py:phrase_token_spans。
 measured:
-  tested_on: UAVScenes AMtown01
-  peak_vram_gb: 2.01
-  threshold: 0.3
-  detections: 4
-  labels_sample:
-  - a building
-  - a road
-  - a road
-uav_validation_status: not_started
-production_ready: false
+  deployment_smoke:
+    tested_on: UAVScenes AMtown01
+    peak_vram_gb: 2.01
+    threshold: 0.3
+    detections: 4
+  chained_smoke:
+    date: '2026-08-25'
+    script: scripts/smoke_grounded_sam.py
+    tested_on: UAVScenes 3 场景 × 2 帧（2048×2448）
+    box_threshold: 0.30
+    total_instances: 47
+    peak_vram_gb: 2.37     # 含 SAM 2.1
+    load_seconds: 7.1
+    seconds_per_frame: 0.5-1.2
+    off_vocab_labels: 0
+    checks_passed: 4/4
+uav_validation_status: validated_with_known_limitation
+uav_measured_limitation:
+  what: 短语得分**不具备「概念在不在」的判别力**（近底视航拍）
+  method: >-
+    负控标定 —— 往提示词表里掺入画面中不可能存在的概念
+    （北极熊 / 潜艇 / 飞船 / 三角钢琴 / 恐龙 / 热气球），
+    比较真实概念与负控概念的「每提示词每帧检出率」。
+  script: scripts/calibrate_grounded_sam.py
+  n_frames: 12
+  competitive_setting:            # 18 条短语同送一次前向
+    peak_score_hot_air_balloon: 0.5397   # 高于**所有**真实短语
+    peak_score_dinosaur: 0.3108          # 高于 person/solar panel/truck/boat/bus
+    discriminability_ratio: 2.39-4.10    # 阈值 0.15-0.30
+    note: 没有任何阈值能把负控清零；0.50 处真实项归零而负控仍剩 1
+  isolated_setting:               # 每条短语单独一次前向，排除长提示词串扰
+    flag: --isolated
+    peak_score_dinosaur: 0.6099          # 压过 12 条真实短语中的 10 条
+    peak_score_polar_bear: 0.5574        # 同上
+    discriminability_ratio: 1.03-1.28    # 阈值 0.20-0.40 ≈ 1.0 = **零判别力**
+  conclusion: >-
+    绝对短语得分回答不了「这个概念在不在画面里」，只能回答
+    「在给出的这几条短语里哪一条最贴」。
+  consequence: >-
+    **本模型的 label MUST NOT 作为类别使用。** 类别由 OneFormer 多数投票给出
+    （pipeline/instance_fusion.py），GDINO 短语只作为 label_proposed 留在血缘里。
+    本模型在管线中的职责收窄为「产出实例框」，供 SAM 2.1 转成边界。
+production_ready: true
+production_scope: instance_boundary_proposals_only
 blocking_issues: []

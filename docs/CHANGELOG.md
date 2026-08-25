@@ -42,6 +42,189 @@
 
 ## 2026-08-25
 
+### `[需求]` Grounded-SAM 必须接入，且要找最新版本跑通 — 用户
+
+用户原话：
+
+> 「我理解，你现在只配置了 oneFormer，因为航拍主体是类似水面这样的没有不好去划定边界的
+> stuff，而不是 things。但是我觉得 Grounded Sam 是一定要用的，所以到请找最新的版本，
+> 下载权重，然后测试并保证能够跑通。」
+
+**这推翻了本文件同日更早那条**「Grounded-SAM2 等到做可数物体的 grounding 时再 justify」
+以及 `pipeline/segmentation.py` 初版 docstring 里「用 OneFormer 而不是 Grounded-SAM」的判断。
+我那个判断**前半对、后半错**：stuff 该用语义分割成立，但这不构成不用 Grounded-SAM 的理由 ——
+语义图给不出实例，而 grounding 任务族、C2 的人数计数、跨视角对应**都需要个体**。
+
+已在 `DECISIONS.md` §19.13 立档，含版本选择的核验结论
+（v1.0 仍是最新 tagged release；GDINO 1.5/1.6 Pro 只有 API 无权重；
+走 transformers 原生实现避开 CUDA 算子编译；SAM 3 是另一条路线另评）。
+
+### `[决策]` 许可策略：学术非商用可用即用 — 用户
+
+用户原话：
+
+> 「我们的项目是纯为科研服务的，只要是可以为学术用途且不参与商业用途能使用模型的话，
+> 就请你用。否则你再给我反馈它的使用限制情况。」
+
+据此：满足「学术非商用可用」的模型**直接采用不再请示**；不满足的不接入并把
+**具体限制条款**反馈用户。义务性条款（署名、引用、附协议、演绎作品沿用许可）照做，
+写进发布清单，不逐条请示。**M-011（AGPL 决策）据此关闭。**
+
+涉及：`docs/DECISIONS.md` §19.12、`docs/USER_ACTIONS.md` M-011。
+
+### `[实现]` Grounded-SAM-2 接入并跑通 — Agent
+
+新增 `pipeline/grounded_sam.py`（Grounding DINO 文本→框 → SAM 2.1 框→mask）。
+默认提示词表 12 条，**每条都在 docstring 里指名它服务哪个下游能力**（§0.3）。
+
+实测（`scripts/smoke_grounded_sam.py`，UAVScenes 3 场景 × 2 帧）：
+47 实例，加载 7.1 s，峰值显存 2.37 GB，每帧 0.5–1.2 s，4 项检查全过。
+mask/框面积比中位 0.510（确实在描边界而非填框）。
+
+涉及：`pipeline/grounded_sam.py`、`scripts/smoke_grounded_sam.py`、
+`registry/experts/grounded_sam2.yaml`（新，组合卡）、
+`grounding_dino_base.yaml` / `sam2_1_hiera_base_plus.yaml`（升到 0.2.0）、
+`docs/OPERATIONS.md`（复现命令 + 三个踩过的坑）。
+
+### `[修正]` Grounding DINO 的类别标签零判别力 — 因此它**不能**用来定类别 — Agent
+
+**这是本次交付最重要的结论，且它改掉了原本的设计意图。**
+
+负控标定（`scripts/calibrate_grounded_sam.py`）：往提示词表里掺入画面中不可能存在的
+概念（北极熊/潜艇/飞船/三角钢琴/恐龙/热气球），12 帧近底视：
+
+| 设置 | 负控峰值 | 判别比（按提示词数归一） |
+|---|---|---|
+| 18 条同送一次前向 | `a hot air balloon` **0.540**，高于所有真实短语 | 2.39–4.10 |
+| 逐条单独送（`--isolated`） | `a dinosaur` **0.610**、`a polar bear` 0.557 | **1.03–1.28 ≈ 1.0** |
+
+第二行是真相 —— 竞争设置下那个 2–4 倍是**词表大小的假象**（12 真 vs 6 负）。
+没有任何阈值能把负控清零：0.50 时真实项已归零而负控还剩 1。
+
+**为什么必须记为 `[修正]`**：`registry/experts/grounding_dino_base.yaml` v0.1.0 里
+`labels_sample` 写着 `a building` / `a road`，读起来像「类别可用」。
+**不可用。** 它的短语得分回答不了「这个概念在不在」，只能回答「给定这几条里哪条最贴」。
+
+由此把职责收窄：**Grounded-SAM 只出边界，类别改由 OneFormer 出。**
+并写进 `DESIGN.md` §14.1.1 三条 MUST NOT，以及 §46.6 新增的**第 5 项准备要求**
+（「能力边界标定」—— 凡是要把模型自报的类别/置信度写进 metadata 的专家，
+MUST 先量出它在本数据分布上有没有判别力）。
+
+### `[实现]` L2-S3 实例融合：边界取 Grounded-SAM，类别取 OneFormer — Agent
+
+新增 `pipeline/instance_fusion.py`。类别由 mask 内像素**多数投票**得出
+（不用中心点 —— 细长物体的中心点常落在背景上），排除 `sky`，
+形状不一致时抛错而非静默广播。
+
+实测（`scripts/verify_instance_fusion.py`）：21 提议 → 21 定类（100%），
+纯度中位 0.897 / P25 0.744 / <0.6 占 9.5%，
+GDINO 与 OneFormer 类别一致率 **38%** —— 分歧集中在细长人造物
+（`a utility pole`→building ×3、`a street lamp`→vegetation ×2、
+`a power line`→ground_natural ×2），恰好复现负控结论。
+一致率低是预期，它作为 §0.7 第三层的**分歧信号**留存。
+
+⚠ 诚实记录一条**不能宣称的东西**：高纯度只证明 mask 内语义一致，
+**不证明它是一个正确的物体边界** —— 均质屋顶上任取一块 mask 纯度都是 100%。
+已写进 `DESIGN.md` §14.1.2 与专家卡。
+
+### `[修正]` `canonicalize` 的朴素子串匹配把 `street lamp` 判成植被、`ottoman` 判成人 — Agent
+
+**这是已接线的生产代码里的真 bug**（`pipeline/segmentation.py` 已在 R-14 接进
+`extract_l1`）。审全部 150 个 ADE20K 标签，查出 4 处中缀误配：
+
+| 原始标签 | 误判成 | 因为含 |
+|---|---|---|
+| `street lamp` / `streetlight` | vegetation | s**tree**t |
+| `ottoman, pouf, pouffe, puff, hassock` | **person** | otto**man** |
+| `armchair` | structure | arm**chair** |
+| `kitchen island` | ground_natural | is**land** |
+
+第二条最严重：**person 是 C2 的硬排除项**，一张沙发凳被判成人，
+等于凭空造出一片「绝对不能降落」区。
+
+修法：关键词改为 `\b` **词首**边界匹配（不是全词 —— `tree` 仍要匹配 `trees`、
+`mount` 仍要匹配 `mountain`）。复审：0 残留冲突。
+修后类别分布：other 85 / structure 24 / vehicle 9 / ground_natural 7 /
+water 7 / vegetation 6 / ground_paved 5 / building 4 / sky 2 / person 1。
+
+顺带给 `_RULES` 的 structure 补了开放词表关键词
+（street lamp / solar panel / power line / cable / wire），
+使同一套规则能同时归一 ADE20K 标签与 Grounded-SAM 的名词短语。
+
+### `[修正]` transformers 的 Grounding DINO 后处理会把标签拼碎 — Agent
+
+`post_process_grounded_object_detection` 内部走 `get_phrases_from_posmap`：
+把该 query 上所有过 `text_threshold` 的 token 直接解码拼接，**完全不管短语边界**。
+12 条提示词同送时实测产出 `"a car a"` / `"a truck bus"` / `"a"` / `"a building solar panel"`。
+它接受 `text_labels` 参数但**根本没用在标签这条路上**。
+
+改为按短语的 token span 归属：用 fast tokenizer 的 `offset_mapping` 把每条短语的
+字符区间映射回 token 下标，逐 query 取 span 内最大概率，argmax 定标签。
+副作用是 `text_threshold` 不再需要，已删除。
+
+**这类错不报错也不崩**，标签只是悄悄变成合法英文碎片 —— 因此冒烟测试里
+固定加一条「标签必须落在提示词表内」的断言作回归闸。
+
+### `[修正]` 冒烟测试里「mask 必须完全在框内」是个错的检查 — Agent
+
+首次冒烟该项 FAIL（最小 0.797，中位 0.988）。**这不是代码 bug，是检查写错了**：
+SAM 的框提示是**提示不是硬约束**，框只框住部件时它会补全到整个物体
+（`a truck bus` 那例 mask/框 = 1.178）。真正的坐标系错误会给出 ≈0 的重叠。
+
+改成记 `mask_outside_box_ratio`（中位 0.011）当作**检测器/分割器的分歧信号**
+（§0.7 第三层），检查项换成「标签全在词表内」。
+
+### `[实现]` 补齐 `pipeline/` 的单元测试 — Agent
+
+新增 `tests/test_pipeline_experts.py`（31 项，不加载任何权重）。
+此前 `tests/` 的 7 个文件**对 `pipeline/` 零覆盖** —— 上面两个真 bug
+（中缀误配、短语归属）在集成测试里都表现得很隐蔽。
+
+覆盖：中缀误配回归闸、提示词表必须全部映射到非 other 类别、
+短语 token span 的不重叠/有序/前缀不塌缩、
+融合的多数投票/纯度/sky 排除/形状不符抛错/**两个置信度分开存**/
+**category 绝不取自 GDINO 标签**。
+
+为此把 `build_prompt_text` 与 `phrase_token_spans` 从 `detect` 内联体里拎成模块级函数。
+
+全量测试 **231 → 264 项，全部通过**。
+
+### `[实现]` 补完 11 项许可核验 — Agent
+
+核验对象：Grounded-SAM-2 / GroundingDINO / SAM 2.1 / SAM 3 / PowerLine-MTYOLO /
+A-YOLOM / ultralytics / DSINE / UFM / DAM-3B / SegFormer。
+**一律取许可原文**（GitHub `LICENSE`、license API、HF model API），无一条凭记忆。
+
+结论：**11 项全部允许学术非商用**，按用户策略均可采用。但：
+
+1. **发布物被锁成非商业且不可逆** —— DSINE / UFM / DAM-3B / SegFormer 均为非商业，
+   其中 UFM 的 SA、DAM-3B §3.2、SegFormer §3.2 **把限制传递给演绎作品**。
+   事后想改宽松许可必须把这四个全部拆掉。写进 `DESIGN.md` §46.6.1。
+   （**不压低天花板** —— UAVScenes 本身即 CC BY-NC-SA 4.0。）
+2. **AGPL 的顾虑不成立** —— §13 需「修改了程序」+「远程用户经网络交互」两条同时成立，
+   本地离线推理一条都不占；§2 明写运行输出不因运行而受许可约束。
+   唯一义务是不得把代码/权重打进公开发布物。
+3. **两处标签与原文打架**：UAVScenes 的 HF 标签漏 NC（此前已记）；
+   UFM 的 README 写 BY-NC-**SA** 而 HF 五个 checkpoint 全标 `cc-by-nc-4.0`。
+   **一律从严**，并写进 §46.6 第 1 项：MUST NOT 以 HF 标签为准。
+
+三项需用户动作已登记：**M-012**（DSINE 属人许可、限单机、禁第三方访问 ——
+与共享服务器冲突）、**M-013**（DSINE 发表时须向帝国理工寄论文副本）、
+**M-014**（UFM 许可口径澄清）。
+
+### `[文档]` 规则 1 同步 — Agent
+
+- `DESIGN.md`：新增 §14.1.1（Grounded-SAM-2 实测约束，三条 MUST NOT）、
+  §14.1.2（L2-S3 融合契约）、§46.6.1（许可传递约束）；
+  §46.6 准备清单 **四项 → 五项**（新增「能力边界标定」），状态表更新；
+- `DECISIONS.md`：§19.12（许可策略）、§19.13（Grounded-SAM 决策与分工重定）；
+- `FINDINGS.md`：新增「许可」节 2 条；「专家模型：准备与选型」节新增 4 条；
+- `OPERATIONS.md`：Grounded-SAM-2 串联复现命令 + 三个坑；总览表更新；
+- `USER_ACTIONS.md`：M-011 关闭，新增 M-012 / M-013 / M-014；
+- `README.md`：R-93（三项许可待定夺）、R-94 / R-95（已完成）、
+  R-96（融合尚未接进 `extract_l1`）；测试数与专家卡数更新。
+
+
 ### `[修正]` 专家调研只搜 HF 导致误报「不存在」 — 用户提供的 ChatGPT 调研触发复查
 
 **用户给了一份 ChatGPT 做的专家模型调研作参考**，并明确「不一定按它说的走，

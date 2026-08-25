@@ -136,11 +136,12 @@ SPEC §13 声称 VGGT-Ω 可输出 camera pose encoding、extrinsics/intrinsics�
 | **SAM 2.1 Base+** | mask 与视频跟踪 | Apache-2.0 | ✅ 已部署，单帧 mask 通过 | — |
 | **Grounding DINO Base** | 开放词汇检测提议 | Apache-2.0 | ✅ 已部署，真实推理通过 | 2.01 GB |
 | **DINOv2 Base** | 跨视角外观特征 | Apache-2.0 | ✅ 已部署，真实推理通过 | 0.37 GB |
-| **OneFormer ADE20K** | 天空/水面/stuff 语义 | MIT | ⚠️ 可运行但权重加载异常 | 4.54 GB |
+| **OneFormer ADE20K** | 天空/水面/stuff 语义；**管线唯一的类别来源** | MIT | ✅ 已验证（加载告警证明无害） | 4.54 GB |
 | **Florence-2 Large** | 属性/描述候选 | MIT | ❌ transformers 版本不兼容 | — |
 | **MoGe-3 ViT-L** | **首选**独立几何交叉校验 | MIT | ✅ 已部署（独立环境 `nyp-moge`） | 2.87 GB |
 | **DA3Metric-Large** | 单目 metric 深度 + sky 掩码 | Apache-2.0 | ✅ 已部署；**无 conf/相机参数** | 2.91 GB |
 | **CoTracker3** | 点轨迹与可见性 | 非商用（待审全文） | ✅ 已部署 | 0.86 GB |
+| **Grounded-SAM-2**（组合） | 开放词表实例分割 | Apache-2.0 | ✅ 串联跑通；**类别不可用，只出边界** | 2.37 GB |
 | VGGT-Ω | **点云主路径** | FAIR NC | 代码就绪，**权重待批**（M-007） | 6.53 GB |
 
 许可全部核验完毕，**无一构成阻塞** —— 均与本项目的非商用学术定位相容。
@@ -162,6 +163,52 @@ is_metric {}              scale_factor None       sky None
 **关键判定：DA3-LARGE-1.1 输出的是 `relative` 深度**，不是 metric —— `is_metric` 为空、`scale_factor` 为 None、depth 落在 0.57~1.02。按铁律 8，**不得用它直接产出绝对米制目标**。若需 metric 第二意见，应改用 `DA3METRIC-LARGE`（同为 Apache-2.0，**已部署**，见下）。
 
 **Grounding DINO** 在航拍图上检出 building / road 等。SPEC §14.1 的强制要求已记入专家卡：detector 的 box/class 置信度与 SAM 的 mask 置信度**必须分别保存**，且**不得把框内像素整体提升到 3D**。
+
+## Grounded-SAM-2 串联（2026-08-25 补测）
+
+Grounding DINO 与 SAM 2.1 串起来用，封装在 `pipeline/grounded_sam.py`。
+**走 transformers 原生实现，不 clone 官方 repo** —— 后者要编译 CUDA 自定义算子 `_C`，
+会把 numpy/torch 依赖再搅一遍（规则 3）。架构与权重一致，差别只在 runtime。
+
+```bash
+cd /home/aiscuser/nyp/3D-data-pipeline
+/home/aiscuser/nyp/scripts/gpu_guard.sh release     # 规则 2：用卡前先腾卡
+
+PY=/home/aiscuser/miniconda3/envs/nyp-3dpipe/bin/python
+export HF_HOME=/home/aiscuser/nyp/model_cache HF_HUB_OFFLINE=1
+
+# 1) 端到端冒烟（框→mask，4 项检查）
+PYTHONNOUSERSITE=1 $PY scripts/smoke_grounded_sam.py --scenes 3 --frames 2
+
+# 2) 负控标定（判别力）—— --isolated 逐条短语单送，排除长提示词串扰
+PYTHONNOUSERSITE=1 $PY scripts/calibrate_grounded_sam.py --scenes 4 --frames 3
+PYTHONNOUSERSITE=1 $PY scripts/calibrate_grounded_sam.py --scenes 4 --frames 3 --isolated
+
+# 3) 与 OneFormer 融合（边界 + 类别）
+PYTHONNOUSERSITE=1 $PY scripts/verify_instance_fusion.py --scenes 4 --frames 2
+
+/home/aiscuser/nyp/scripts/gpu_guard.sh start       # 用完立刻挂回占卡
+```
+
+产物落在 `/home/aiscuser/nyp/metadata/_smoke_grounded_sam.json`、
+`_calib_grounded_sam[_isolated].json`、`_fusion_check.json`。
+
+实测：加载 7.1 s，峰值显存 **2.37 GB**（两个模型合计），每帧 0.5–1.2 s，
+47 实例 / 6 帧，4 项检查全过。
+
+**三个踩过的坑**：
+
+1. **不要用 `post_process_grounded_object_detection` 取标签。**
+   它走 `get_phrases_from_posmap`，把 query 上所有过阈值的 token 直接拼接，
+   不管短语边界；12 条提示词同送时产出 `"a car a"` / `"a truck bus"` / `"a"`。
+   改用短语 token span 归属（`phrase_token_spans`）。
+   **务必保留一条「标签必须在提示词表内」的断言** —— 这类错不报错也不崩。
+2. **「mask 必须完全在框内」是个错的检查。** SAM 的框提示是提示不是硬约束，
+   框只框住部件时它会补全到整个物体（实测最多 1.178 倍框面积）。
+   真正的坐标系错误会给出 ≈0 的重叠，而实测中位重叠 0.989。
+   把溢出量记成 `mask_outside_box_ratio` 当分歧信号用，不要当失败。
+3. **`Sam2Processor` 的框要三层嵌套**：`input_boxes=[[[x1,y1,x2,y2], ...]]`
+   （batch → prompt → box）。少一层不报错，但结果全错。
 
 ## 有问题的两个
 

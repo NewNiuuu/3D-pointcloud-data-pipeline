@@ -737,6 +737,53 @@ Two expert surveys dated 2026-08-23 establish separate semantic/video and indepe
 
 Grounded-SAM-2 is a modular system. Detector box/class confidence and SAM mask confidence MUST be stored separately. Bounding boxes MUST NOT be lifted as though every enclosed pixel belongs to the object.
 
+#### 14.1.1 Grounded-SAM-2 的实测约束（2026-08-25，UAVScenes 近底视）
+
+> 这一小节推翻了上表中 Grounded-SAM-2 那一行的 "semantic proposal" 措辞的一半：
+> 它给的是 **proposal 的边界**，不是 proposal 的**语义**。
+
+**负控标定结论**：往提示词表里掺入画面中不可能存在的概念（北极熊 / 潜艇 / 飞船 /
+三角钢琴 / 恐龙 / 热气球），逐条单独送入时判别比（真实/负控，按提示词数归一）
+在阈值 0.20–0.40 区间为 **1.03–1.28 ≈ 1.0，即零判别力**；
+`a dinosaur` 峰值 0.610 压过 12 条真实短语中的 10 条。
+12 帧、复现脚本 `scripts/calibrate_grounded_sam.py`。
+
+由此确立三条硬约束：
+
+1. **Grounding DINO 的短语标签 MUST NOT 作为 `category` 使用。**
+   它只保留为 `label_proposed`（血缘用途）。类别由 OneFormer 的
+   mask 内多数投票给出（见 §14.1.2）。
+2. **MUST NOT 把 `score_detection` 当作「该概念存在的概率」。**
+   它只在**给定短语集合内部**有比较意义（§14.13 的未标定原则在此具体化）。
+3. **MUST NOT 用 transformers 的 `post_process_grounded_object_detection` 取标签。**
+   它走 `get_phrases_from_posmap`，把 query 上所有过阈值 token 直接拼接，
+   不管短语边界，多短语时产出 `"a car a"` / `"a truck bus"` 这类碎片。
+   MUST 改用短语 token span 归属（`pipeline/grounded_sam.py:phrase_token_spans`）。
+   实现方 SHOULD 保留一条「标签必须落在提示词表内」的断言 ——
+   这类错不报错、不崩，只是标签悄悄变成垃圾。
+
+#### 14.1.2 实例边界与语义类别的融合（L2-S3）
+
+**契约**：`fuse_instances(instances, seg_canonical, canonical_names)`
+→ 每个实例带 `category`（OneFormer 多数投票）、`category_purity`、
+`label_proposed`、`category_agrees`、分开存的两个置信度、以及 `provenance`
+（`boundary_from` / `category_from` 两个教师都要列）。
+实现：`pipeline/instance_fusion.py`。
+
+- 类别 MUST 由 mask 内像素**多数投票**得出，**MUST NOT** 取 mask 中心点 ——
+  细长物体（杆、电线）的中心点经常落在背景上。
+- 投票 MUST 排除 `sky`（其几何无效，§14.5）。全为 `sky` 的实例 MUST 丢弃。
+- mask 与语义图形状不一致时 MUST 抛错，**MUST NOT** 静默广播。
+- `category_purity` 是**可复算测量**（§40.5 机制 1），可用于下游降权；
+  但 **MUST NOT 把它当作边界质量指标** —— 均质屋顶上任取一块 mask 纯度都是
+  100%，而它不是一个实例。
+- `category_agrees` 是 §0.7 **第三层信号**：单个教师给不出「这个实例的类别有争议」。
+  实测一致率 38%，分歧集中在细长人造物（`a utility pole`→building、
+  `a street lamp`→vegetation、`a power line`→ground_natural）。
+
+实测（21 提议实例，`scripts/verify_instance_fusion.py`）：定类率 100%，
+纯度中位 0.897 / P25 0.744 / <0.6 占 9.5%。
+
 ### 14.2 Candidate Tiers
 
 ```yaml
@@ -2680,11 +2727,12 @@ Mid-Air / FlyAwareV2 / UAVStereo，均需重新做许可与可行性核验）。
 
 | 能力 | 需要的专家 | 状态 | 服务的 backlog 项 |
 |---|---|---|---|
-| **薄结构检测**（电线/缆索/细枝） | PowerLine-MTYOLO Nano | 🟡 **权重已下载，但需分叉 runtime**；许可 AGPL-3.0 待用户决策（M-011） | R-30、R-31 |
+| **薄结构检测**（电线/缆索/细枝） | PowerLine-MTYOLO Nano | 🟡 **权重已下载，但需分叉 runtime**；许可已核（AGPL，本地推理无义务，M-011 已关闭） | R-30、R-31 |
 | **空中飞行器感知**（无人机/有人机/鸟） | —— | 🔴 **确无可用预训练专家**（HF/GitHub 均已查） | R-34、R-35 |
-| 语义分割（stuff） | OneFormer ADE20K | ✅ 已部署验证（加载告警已证无害） | C2、C3、L1 实体 |
-| 开放词汇检测 | Grounding DINO | ✅ 已部署验证 | grounding |
-| 实例掩码与视频传播 | SAM 2.1 | ✅ 已部署验证 | 实例级实体 |
+| 语义分割（stuff） | OneFormer ADE20K | ✅ 已部署验证（加载告警已证无害）；**并已定为唯一的类别来源**（§14.1.2） | C2、C3、L1 实体 |
+| 开放词汇检测 | Grounding DINO | ✅ 已部署验证；⚠ **负控实测类别零判别力**，职责收窄为「只出框」（§14.1.1） | grounding |
+| 实例掩码与视频传播 | SAM 2.1 | ✅ 已部署验证并与检测器串通（47 实例 / 6 帧）；视频传播路径仍未验 | 实例级实体 |
+| **开放词表实例分割**（组合） | Grounded-SAM-2 | ✅ 串联跑通，2.37 GB 显存 / 0.5–1.2 s 每帧；**边界可用、类别不可用** | grounding、C2 计数、跨视角对应、R-30 兜底 |
 | 光流与动态证据 | SEA-RAFT | ⬜ 权重不在 HF | R-38 自洽测量、R-34 |
 
 **检索面 MUST 包含 GitHub 与论文主页，不能只搜 HuggingFace。**
@@ -2692,23 +2740,63 @@ Mid-Air / FlyAwareV2 / UAVStereo，均需重新做许可与可行性核验）。
 实际上 PowerLine-MTYOLO **把 checkpoint 直接放在 GitHub 仓库根目录**。
 **UAV / 遥感这类小众领域的模型大量只发在 GitHub**，只搜 HF 会系统性漏掉。
 
-**准备工作 MUST 包含四项**，缺一不算「已准备」：
+**准备工作 MUST 包含五项**，缺一不算「已准备」：
 
-1. **许可核验** —— 代码与权重**分别**核验（同仓库不同权重许可可以不同，已踩过）；
+1. **许可核验** —— 代码与权重**分别**核验（同仓库不同权重许可可以不同，已踩过）。
+   MUST 取**许可原文**（GitHub `LICENSE` / license API / HF model API），
+   **MUST NOT 凭记忆、也 MUST NOT 以 HF 的 `license:` 标签为准** ——
+   实测两处标签与原文打架（UAVScenes 的 HF 标签漏了 NC；UFM 的 README 写
+   BY-NC-**SA** 而 HF 标 `cc-by-nc-4.0`）。**口径冲突时一律从严。**
+   MUST 同时记录该许可是否把限制**传递给演绎作品** —— 那会锁死发布许可（§46.6.1）；
 2. **可获取性** —— 权重实际下载成功，不是「文档说有」；
 3. **部署验证** —— 在本机环境跑通，且**验证输出真的对**
    （OneFormer 曾「能跑但疑似加载错误」，验了才知道无害）；
 4. **输出契约实测** —— 实际给哪些字段，不能只看任务名
-   （DA3Metric 有米制深度但 `conf`/`extrinsics`/`intrinsics` 全是 `None`）。
+   （DA3Metric 有米制深度但 `conf`/`extrinsics`/`intrinsics` 全是 `None`）；
+5. **能力边界标定** —— **凡是要把模型自报的类别或置信度写进 metadata 的专家，
+   MUST 先量出它在本数据分布上有没有判别力**，而不是默认它有。
+   开放词表模型的标定方式是**负控**：往词表里掺入画面中不可能存在的概念，
+   比较真实概念与负控概念的检出率。**这是白送的** —— 不需要任何真值标注。
+   实测教训（2026-08-25）：Grounding DINO 在近底视航拍上判别比 ≈ 1.0，
+   若不测就直接把它的标签当类别，整批 metadata 的类别字段都是噪声，
+   而且**下游看不出来**（标签是合法英文短语，不是明显的垃圾）。
 
-**第 3 项尤其容易被跳过。** 实测教训（2026-08-25）：PowerLine-MTYOLO 的权重
-能下载、大小正常、sha256 可记，看起来「准备好了」——
+**第 3 与第 5 项尤其容易被跳过。** 第 3 项的实测教训（2026-08-25）：
+PowerLine-MTYOLO 的权重能下载、大小正常、sha256 可记，看起来「准备好了」——
 但**用官方 ultralytics 加载直接抛 `AttributeError`**：
 checkpoint 里 pickle 了分叉版才有的 `MultiModel` 类。
 **「有 checkpoint」≠「能部署」**，必须真的把它加载起来跑一次才算数。
+第 5 项则是「能跑」≠「能用」：**跑通只证明形状对，不证明数值有意义。**
 
 **MUST NOT 在准备阶段就放宽标准**：专家卡的 `deployment_status` 只有
 `deployed_verified` 才算数，`blocked` / `deployed_with_warning` 都要写清原因。
+专家卡 SHOULD 另立 `uav_validation_status`，取值区分
+`not_started` / `validated` / `validated_with_known_limitation`；
+第三种 MUST 同时写明限制是什么、怎么测出来的、以及**因此把职责收窄到了哪里**。
+
+#### 46.6.1 许可对发布物的传递约束（2026-08-25 核验结论）
+
+**已核验的 11 项（10 模型 + Grounded-SAM-2 组合仓库）全部允许学术非商用**，
+按 §19.12 的用户策略均可直接采用。但其中四项带非商业限制，
+且三项把该限制**传递给演绎作品**：
+
+| 模型 | 许可 | 是否传递 |
+|---|---|---|
+| DSINE | Imperial College 自定义 | 属人许可，另有单机/禁第三方访问条款（M-012） |
+| UFM（权重） | CC BY-NC-SA（从严口径） | **是** —— SA |
+| DAM-3B | NVIDIA License | **是** —— §3.2 要求演绎作品沿用 §3.3 非商业限制 |
+| SegFormer | NVIDIA Source Code License | **是** —— §3.2 同上 |
+
+⇒ **本项目的发布物 MUST 为非商业许可，且此决定不可逆** ——
+事后想改成宽松许可，必须把这四个模型全部拆掉重跑。
+
+这**不压低天花板**：UAVScenes 本身即 CC BY-NC-SA 4.0，产出本来就得走 NC-SA。
+但新增模型时 MUST 检查这一条 —— 引入一个新的 NC 传递模型不改变现状，
+而未来若想放宽许可，**每一个这样的模型都是一处必须拆除的钉子**。
+
+AGPL 类（PowerLine-MTYOLO / A-YOLOM / ultralytics）**不在此列**：
+本地离线推理不触发任何义务，产出不带传染（推导见 `DECISIONS.md` §19.12）。
+唯一要求是**发布物中 MUST NOT 打包这些模型的代码或权重**，只给上游链接。
 
 #### 2026-08-25 调研结论：前两项**没有可直接使用的专家模型**
 

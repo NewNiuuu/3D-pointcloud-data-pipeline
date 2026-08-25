@@ -70,6 +70,49 @@
 
 ## 专家模型：准备与选型
 
+### Grounding DINO 认得出「哪里有东西」，认不出「那是什么」—— 恐龙和北极熊的检出率与真车持平
+
+往提示词表里掺进画面中不可能存在的概念做负控（北极熊 / 潜艇 / 飞船 / 三角钢琴 / 恐龙 / 热气球），12 帧近底视航拍：
+
+| 设置 | 负控峰值 | 判别比（真实/负控，按提示词数归一） |
+|---|---|---|
+| 18 条短语同送一次前向 | `a hot air balloon` **0.540**，高于**所有**真实短语 | 2.39 – 4.10 |
+| 每条短语单独一次前向 | `a dinosaur` **0.610**、`a polar bear` 0.557，压过 12 条真实短语里的 10 条 | **1.03 – 1.28 ≈ 1.0** |
+
+第二行才是真相：竞争设置下那个 2–4 倍是**词表大小的假象**（12 条真 vs 6 条负）。单独送时判别比塌到 1.0 —— **零判别力**。没有任何阈值能把负控清零；阈值 0.50 时真实项已归零而负控还剩一个。
+
+**为什么重要**：它的短语得分回答不了「这个概念在不在画面里」，只能回答「在你给的这几条里哪条最贴」。**所以 Grounded-SAM 的 label 不能当类别用**。分工因此重定：**边界（哪一个）取 Grounded-SAM，类别（是什么）取 OneFormer** —— 两者在 `pipeline/instance_fusion.py` 合并，GDINO 的短语只作 `label_proposed` 留在血缘里。
+
+这也是个方法论样本：**负控是白送的**，往提示词里塞几个不可能的概念就能把一个开放词表模型的可信区间量出来，不需要真值标注。凡是「模型自报置信度」要进 metadata 的地方都该这么测一遍。
+
+📄 `registry/experts/grounding_dino_base.yaml` 的 `uav_measured_limitation`；复现 `scripts/calibrate_grounded_sam.py`
+
+### 两个教师各出一半，融合率 100%，分歧模式恰好复现了负控结论
+
+Grounded-SAM 出边界 + OneFormer 出类别，21 个提议实例全部定到类（100%），mask 内语义纯度中位 0.897 / P25 0.744 / 低于 0.6 的占 9.5%。GDINO 短语与 OneFormer 判定的**一致率只有 38%**，而分歧全落在细长与人造物上：`a utility pole`→building ×3、`a street lamp`→vegetation ×2、`a power line`→ground_natural ×2。
+
+**为什么重要**：一致率低**是预期**（上一条已证明 GDINO 的类别不可信），它的价值在于给出「分歧信号」的基线密度 —— 这正是 §0.7 第三层：单个教师说不出「我这个实例的类别有争议」。
+
+⚠ **不要把纯度当边界质量指标。** 高纯度只证明 mask 内语义一致 —— 均质屋顶上随便一块 mask 纯度 100%，但它不是一个实例。
+
+📄 `registry/experts/grounded_sam2.yaml`；复现 `scripts/verify_instance_fusion.py`
+
+### transformers 自带的 Grounding DINO 后处理会把标签拼碎
+
+`post_process_grounded_object_detection` 内部走 `get_phrases_from_posmap`：把该 query 上所有过阈值的 token 直接解码拼起来，**完全不管短语边界**。12 条提示词同送时实测产出 `"a car a"`、`"a truck bus"`、`"a"` 这样的碎片；它接受 `text_labels` 参数但根本没用在标签这条路上。
+
+**为什么重要**：这类错**不会报错也不会崩**，只是标签悄悄变成垃圾 —— 如果没做「标签必须在词表内」这条检查，它会一路流进 metadata。改法是按短语的 token span 归属（用 fast tokenizer 的 offset mapping 把每条短语的字符区间映射回 token 下标，逐 query 取 span 内最大概率，argmax 定标签），顺带 `text_threshold` 这个阈值也就不需要了。
+
+📄 `pipeline/grounded_sam.py` 的 `phrase_token_spans`
+
+### 关键词匹配用朴素 `in` 会把 `street lamp` 判成植被、把 `ottoman` 判成人
+
+审了全部 150 个 ADE20K 标签，发现 4 处中缀误配：`s**tree**t lamp` → vegetation、`otto**man**, pouf, ...` → **person**、`arm**chair**`、`kitchen is**land**`。其中 person 是 C2 的**硬排除项** —— 一张沙发凳被判成人，等于凭空造出一片「绝对不能降落」区。
+
+**为什么重要**：ADE20K 的标签是英文短语不是单词，朴素子串匹配对这种标签**必然**出事，只是错得安静。加 `\b` 词首边界后复审：0 残留冲突。用词首而非全词，是因为 `tree` 仍要能匹配 `trees`、`mount` 仍要能匹配 `mountain`。
+
+📄 `pipeline/segmentation.py` 的 `_RULES`；回归测试 `tests/test_pipeline_experts.py`
+
 ### 只搜 HuggingFace 会系统性漏掉小众领域的模型
 
 我第一轮调研薄结构专家时只搜了 HF，命中的全是 0 下载量的习作，于是结论写「生态里没有可用的预训练专家」。**这个结论是错的**：PowerLine-MTYOLO 把 6 MB 的 checkpoint **直接放在 GitHub 仓库根目录**，README 里明写 AGPL-3.0。
@@ -107,6 +150,39 @@ R-14 把 L1 实体的语义来源从数据集自带的人工标注换成 OneForm
 **注意这不等于模型更准**：没有对真值验证过，只能说更**可用**（有名字、对齐我们的类别体系）、数量相当。
 
 **顺带抓到一个安全问题**：类别映射的第一版把 `person` 归进了 `other`。C2 的核心判据就是「平坦 ≠ 可降落：水面平、车顶平、**人群上方也平**」——把人归进 other 等于把最危险的降落区放进候选。已单列为硬排除类。台阶、长椅、雕塑等街道家具同样从 other 移进 structure。
+
+---
+
+## 许可
+
+### 全部候选专家学术可用 —— 但整条管线已被锁成「不可商用」，且这一条**不可逆**
+
+2026-08-25 逐个核验了 11 项（10 个模型 + Grounded-SAM-2 组合仓库）的许可原文（GitHub LICENSE / license API / HF model API，无一条靠记忆推断）：
+
+| 许可类型 | 模型 | 对我们的实际约束 |
+|---|---|---|
+| Apache-2.0 | Grounded-SAM-2、GroundingDINO、SAM 2.1 | 无 |
+| SAM License（自定义） | SAM 3 | **无非商业限制**；义务是转发时附协议、论文致谢、遵守贸易管制、不逆向、不用于军事/核/武器 |
+| AGPL-3.0 | PowerLine-MTYOLO、A-YOLOM、ultralytics | 本地推理**不触发任何义务**；只要不重分发代码或权重就完全在 §5/§6/§13 之外 |
+| 非商业 | DSINE、UFM（权重）、DAM-3B、SegFormer | 仅限非商业研究；**其中三个把该限制传递给演绎作品** |
+
+**为什么重要**：UFM 的 SA、DAM-3B §3.2、SegFormer §3.2 都要求演绎作品继续携带非商业限制。**我们发布的数据集因此必须是非商业的，且事后无法改成宽松许可，除非把这四个模型全部拆掉。** 这是个应该现在就记下的设计约束，不是发布前才发现的意外。
+
+**好消息是它不新增约束**：UAVScenes 本身已经是 CC BY-NC-SA 4.0（见下方数据集条），我们的产出本来就得跟着走 NC-SA。模型侧的 NC 与数据侧的 NC 重合，**天花板没有被压低**。
+
+⚠ 三个需要动作的点已登记到 `USER_ACTIONS.md`：DSINE 的许可是**属人的、限单机、禁第三方访问**（与共享服务器冲突）且要求向帝国理工**寄送论文副本**；UFM 的 README 说 NC-SA、HF 标签说 NC，两处打架；PowerLine-MTYOLO **没有 LICENSE 文件**，AGPL 只写在 README 里。
+
+📄 各 `registry/experts/*.yaml` 的 `license` 段；决策见 `DECISIONS.md` 2026-08-25「许可策略」
+
+### AGPL 的「网络条款」需要两个条件同时成立，我们一个都不占
+
+AGPL-3.0 §13 的源码披露义务要求 **(a) 你修改了程序 且 (b) 远程用户通过网络与你的修改版交互** —— 两个条件是并列的。§0 明确把「在计算机上执行」和「修改私有副本」排除在 propagate 之外，§2 则无条件允许运行未修改的程序，并写明「运行的输出仅在其内容本身构成受保护作品时才受本许可约束」。
+
+**为什么重要**：我先前把 AGPL 当成「强 copyleft + 网络条款 = 高风险」挂起了 M-011。**这个顾虑对本项目不成立**：本地离线推理不触发任何义务，模型的预测输出（框、mask）不是源码的复制或改编，因而**生成的数据集不带 AGPL 传染**。ultralytics 自己的 README 也写「AGPL-3.0 非常适合学生、研究者和爱好者」，其企业许可针对的是商业内部工具与生产部署。
+
+唯一的义务是**重分发**：若把代码或 `.pt` 权重打进公开发布物，就得连同完整对应源码一起按 AGPL 发。**做法：发布物里不放这三个模型的权重，只给上游链接。**
+
+📄 `DECISIONS.md` 2026-08-25「AGPL 决策」
 
 ---
 

@@ -1,0 +1,102 @@
+# Expert Card: Grounded-SAM-2（组合专家）
+# Contract: DESIGN.md §23.2 (expert-registry-manager)
+# 核验日期: 2026-08-25
+#
+# 这是一张**组合卡**：Grounded-SAM 不是一个权重，而是两个模型的串联。
+# 单卡各自记各自的实测，本卡记「串起来之后是什么、能干什么、不能干什么」。
+
+expert_id: grounded_sam2
+display_name: Grounded-SAM-2 (Grounding DINO + SAM 2.1)
+card_version: 0.1.0
+kind: composite
+role: open_vocabulary_instance_segmentation
+spec_ref: SPEC §14.1
+research_tier: A0
+deployment_status: deployed_verified
+components:
+- role: detector
+  expert_id: grounding_dino_base
+  card: registry/experts/grounding_dino_base.yaml
+- role: segmenter
+  expert_id: sam2_1_hiera_base_plus
+  card: registry/experts/sam2_1_hiera_base_plus.yaml
+
+version_selection:
+  chosen: IDEA-Research/Grounded-SAM-2 v1.0 的架构组合
+  why_this_is_the_latest: >-
+    v1.0（2024-12）至今仍是该系列最新 tagged release。初代
+    Grounded-Segment-Anything 用 SAM 1，已被它取代。
+  rejected:
+  - what: Grounding DINO 1.5 / 1.6 Pro
+    why: 只有 API、不放权重 —— 离线管线用不了
+  - what: clone 官方 repo
+    why: >-
+      官方 GroundingDINO 要编译 CUDA 自定义算子 _C，会再搅一遍本已脆弱的
+      numpy/torch 依赖（规则 3）。改用 transformers 原生实现，
+      架构与权重完全一致，差别只在 runtime。
+  separate_line:
+  - what: SAM 3（2025-11）
+    status: 许可已核，学术可用（见 docs/FINDINGS.md）
+    why_not_here: >-
+      它把两段合成一段（单模型概念提示分割），是**另一条路线**，
+      不是「Grounded-SAM 的最新版」。另行评估。
+
+license:
+  code: Apache-2.0        # Grounded-SAM-2 / GroundingDINO / sam2 三个 repo 均是
+  weights: apache-2.0
+  gated: false
+  training_allowed: true
+  verified_at: '2026-08-25'
+  academic_use: allowed
+  commercial_restriction: none
+
+io_contract:
+  entry: pipeline.grounded_sam.GroundedSAM.ground
+  input: 单帧 RGB + 名词短语列表（默认表 UAV_THING_PROMPTS，12 条）
+  output: list[Instance]（label / box / score_detection / score_mask / mask）
+  target_hw: 给定时 mask 走**最近邻**缩放（二值图，双线性会在边界造出 0.5）
+
+measured:
+  date: '2026-08-25'
+  script: scripts/smoke_grounded_sam.py
+  tested_on: UAVScenes 3 场景 × 2 帧（2048×2448）
+  total_instances: 47
+  peak_vram_gb: 2.37
+  load_seconds: 7.1
+  seconds_per_frame: 0.5-1.2
+  checks_passed: 4/4
+
+uav_validation_status: validated_with_known_limitation
+capability_split:
+  # 这条分工是**实测定的**，不是设计时拍的 —— 见两张组件卡的 uav_measured_*
+  boundary_which_one: grounded_sam2      # ✅ 可用
+  category_what_is_it: oneformer         # ✅ 可用；GDINO 的类别 ❌ 零判别力
+  fused_in: pipeline/instance_fusion.py
+  fusion_measured:
+    script: scripts/verify_instance_fusion.py
+    box_threshold: 0.30
+    n_proposed: 21
+    n_categorized: 21          # 100%
+    purity_median: 0.8975
+    purity_p25: 0.7444
+    low_purity_frac: 0.0952    # < 0.6
+    category_agreement: 0.381  # GDINO 短语 vs OneFormer 投票
+    agreement_note: >-
+      一致率低是**预期**，且分歧模式正好复现了负控结论：
+      a utility pole→building ×3、a street lamp→vegetation ×2、
+      a power line→ground_natural ×2 / ground_paved ×1、a solar panel→ground_paved。
+      分歧本身被当作 §0.7 第三层信号留存，供 C1 使用。
+
+downstream_justification:      # §0.3 反向证成，每条指名下游能力
+- Grounding 任务族（grounding/object_v1）需要「可指称的个体」；语义连通域不是
+- C2 硬排除项「人」需要**计数**，语义图只能说这片是 person
+- cross_view_correspondence_v1 需要实例身份，stuff 没有身份
+- R-30 薄障碍的零样本兜底（PowerLine-MTYOLO 卡在 A-YOLOM fork 上，当前不可部署）
+- 开放词表是逃生口：归并后的 10 类是封闭集，grounding 要的是任意名词短语
+
+production_ready: true
+production_scope: instance_boundaries_only_categories_from_oneformer
+blocking_issues: []
+open_questions:
+- 尚未接入 extract_l1 —— L1 实体目前仍来自语义连通域
+- 薄结构（电线）的实际召回未量化，只知道"能出框"

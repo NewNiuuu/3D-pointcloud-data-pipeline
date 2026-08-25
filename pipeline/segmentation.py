@@ -5,10 +5,17 @@
 但换一个没有语义标注的数据集就断了 —— 方法就不可移植了，这正是铁律 14 要防的。
 本模块用**模型**产出同样形态的稠密语义图，使整条链回到「只要有图就能跑」。
 
-**为什么用 OneFormer 而不是 Grounded-SAM**：
-航拍画面的主体是**水面、植被、裸地、硬化面**这类 *stuff*（无定形、不可数），
-不是 *things*（可数物体）。Grounding DINO 出的是框，对 stuff 不好使；
-语义分割才是对的工具。Grounded-SAM 留给「指认某个具体物体」那类任务。
+**与 Grounded-SAM 的分工**（2026-08-25 实测后重定）：
+初版这里写的是「用 OneFormer 而不是 Grounded-SAM，因为航拍主体是 stuff 不是 things」。
+那个判断的**前半对、后半错** —— stuff 确实该用语义分割，但这不构成不用 Grounded-SAM 的理由。
+实测（FINDINGS）表明真正的分工是另一条线：
+
+- **OneFormer 管「是什么」** —— 稠密语义，覆盖 stuff，类别可信；
+- **Grounded-SAM 管「哪一个」** —— 实例边界。它的**类别标签不可信**
+  （负控实验：不可能存在的概念与真实概念检出率之比 ≈ 1.0），
+  但边界质量好，恰好补上语义图没有实例的短板。
+
+两者在 :mod:`pipeline.instance_fusion` 里合并：**边界取 Grounded-SAM，类别取本模块**。
 
 **关于 OneFormer 的加载警告**（2026-08-25 已验证）：
 `transformers 5.15.1` 加载时报 `swin.layernorm.weight/bias` MISSING（随机初始化）。
@@ -23,6 +30,7 @@ C3 的地形推理需要自然地表与建筑分开。原始标签保留在 `cat
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any, Sequence
 
@@ -45,11 +53,13 @@ CANONICAL_CLASSES: dict[str, str] = {
     "other":          "未归入上述的一切。**占比过高说明映射需要补**",
 }
 
-#: ADE20K 标签 → 项目类别。**按关键词匹配，顺序敏感**（先匹配到的胜出）。
+#: ADE20K 标签 / 开放词表短语 → 项目类别。**按关键词匹配，顺序敏感**（先匹配到的胜出）。
 #:
 #: 用关键词而非逐个枚举 150 类：ADE20K 的标签本身是英文短语
 #: （``"water"``、``"tree"``、``"sidewalk, pavement"``），关键词规则可读、可维护，
 #: 换成别的分割模型（COCO-Stuff、Cityscapes）时改动最小。
+#: 同一套规则也用于 Grounded-SAM 的开放词表短语（``"a car"`` → ``vehicle``），
+#: 因此下面几条 ADE20K 没有、但提示词表里有的关键词（solar panel / power line）也列在这。
 _RULES: list[tuple[str, tuple[str, ...]]] = [
     ("sky",            ("sky",)),
     ("water",          ("water", "sea", "lake", "river", "pool", "waterfall")),
@@ -67,17 +77,26 @@ _RULES: list[tuple[str, tuple[str, ...]]] = [
     # 台阶、长椅、雕塑这类「街道家具」都是障碍物 —— 对 C2 与 structure 同性质。
     # 2026-08-25 补：它们原先落进 other，而 other 是不该出现在可降落候选里的。
     ("structure",      ("fence", "pole", "railing", "wall", "bridge", "bannister",
-                        "column", "rail", "signboard", "streetlight",
+                        "column", "rail", "signboard", "streetlight", "street lamp",
                         "stair", "step", "bench", "table", "chair", "sculpture",
-                        "trash", "door", "awning", "booth", "kiosk")),
+                        "trash", "door", "awning", "booth", "kiosk",
+                        # 以下 ADE20K 没有，来自 Grounded-SAM 的开放词表：
+                        # 都是 C2 意义上的障碍物 —— 平面上的太阳能板同样不可降落
+                        "solar panel", "power line", "powerline", "cable", "wire")),
 ]
 
+#: 关键词必须匹配在**词首**，不能是别的词的中缀。
+#:
+#: 2026-08-25 实测踩到两个真 bug：``street lamp`` 里含 ``tree`` → 被判成 vegetation；
+#: ``ottoman, pouf, ...`` 里含 ``man`` → 被判成 **person**（C2 的硬排除项）。
+#: 朴素 ``in`` 匹配对这类英文标签必然出事，因此加词边界。
+#: 用 ``\b`` 前缀而非全词：``tree`` 仍要能匹配 ``trees``、``mount`` 仍要能匹配 ``mountain``。
 
 def canonicalize(raw_label: str) -> str:
-    """ADE20K 标签 → 项目类别。命中不了归 ``other``。"""
+    """ADE20K 标签 / 名词短语 → 项目类别。命中不了归 ``other``。"""
     low = raw_label.lower()
     for canon, keys in _RULES:
-        if any(k in low for k in keys):
+        if any(re.search(r"\b" + re.escape(k), low) for k in keys):
             return canon
     return "other"
 
