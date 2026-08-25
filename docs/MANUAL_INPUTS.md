@@ -60,6 +60,8 @@ export HF_TOKEN=实际的值
 
 | # | 需要的信息 | 用途 / 触发环节 | 变量名或存放位置 | 状态 | 更新时间 | 备注 |
 |---|---|---|---|---|---|---|
+| M-009 | **带删除权限的 Azure SAS Token（`sp=racwdl`）** | `scripts/blob_backup.sh` 的日期改名：把 `nyp_<旧日期>` 改名为 `nyp_<今日>` = 服务端复制 + 删源，删源需要 `d` 权限 | `~/.blob_config.json` 的 `sas_token`（在 blob_manager 里用 `token` 命令更新） | **待提供（功能降级中，备份本身不受影响）** | 2026-08-25 | 当前 token 权限为 `racwl`，实测 `azcopy rm` 返回 403 `AuthorizationPermissionMismatch`。缺它的后果：跨天后目录名停在旧日期，脚本会记 ⚠ 并继续同步到旧目录，**数据不会丢**。之所以不硬改名，是因为旧目录删不掉的话每天会在共享容器多堆一份 58G 全量副本。补上后无需改代码，下一轮自动改名 |
+| M-010 | **续期后的 SAS Token** | 同上，当前 token `se=2026-08-29T00:00:00Z` **将于 2026-08-29 过期** | 同上 | **待提供（8-29 前）** | 2026-08-25 | 过期后所有 azcopy 请求 403。**这正是 8-23 那次备份失败 86 轮却无人察觉的原因**（脚本里烤死了一个 2026-04-05 就过期的 token）。新脚本每轮现读配置，且 `blob_backup.sh status` 会显示剩余天数，但仍需人工续期 |
 | M-007 | VGGT-Ω 权重访问 | Layer 2 的 L2-S1 几何重建 | `model_cache/vggt_omega/` | **已通过备选渠道获取（下载中）** | 2026-08-25 | 用户同事提示魔搭社区有同一模型。经查 `facebook/VGGT-Omega` 为官方命名空间发布、482 次下载、**未实施 gating**，权重 `LICENSE.txt` 可直接读取（HF 侧需授权才可见）—— 由此补齐了权重许可这一未知项：**FAIR NC v1，与代码许可一致**。HF 的申请仍在走，两条路径不冲突 |
 | M-008 | **UAVScenes `calibration_results.py`（相机-LiDAR 外参）** | 用独立真值逐像素验证深度 —— 自洽检验已被证明不足以判定精度 | `data_raw/UAVScenes/` | **待提供（阻塞中）** | 2026-08-25 | **重新升级为必需**。我曾于 2026-08-24 将其降级，理由是「尺度可由相机轨迹恢复」，该理由已被系统扫描推翻（锚定后米制深度 CV 仍达 19.5%）。没有独立真值就无法给出任何精度数字，`domain_calibrated` 无法置位，绝对米制任务无法解锁。只在 OneDrive/GDrive 完整版根目录 |
 | M-002 | HuggingFace Token | 下载 gated **模型权重**（SAM 2.1、Grounding DINO、DINOv2、MoGe-3 等） | `HF_TOKEN` | 待提供 | 2026-08-24 | 部分 gated 仓库还需先在网页端接受协议。到 vertical slice 第 4–5 步才需要。**UAVScenes 数据集本身非 gated，不需要此项** |

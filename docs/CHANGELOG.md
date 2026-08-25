@@ -23,6 +23,78 @@
 
 ## 2026-08-25
 
+### `[决策]` 标注格式契约定为 ShareGPT — 用户
+
+3D-GRPO 目前仍很基础，**只确定了标注格式尽量满足 ShareGPT 格式**；3D-GRPO 与 SFT 都可依据数据的具体类型再做调整。
+
+**含义**：下游训练框架的现状不构成对数据设计的约束。adapter 的目标是产出**规范的 ShareGPT 记录**并**把判分所需信息给全**，而非迁就某个框架的当前实现。已据此调整 `pointcloud_native` 的文档口径与 verification 字段（`reward_compatible_with_current_grpo` → `sharegpt_conformant` + `mcq_renderable`）。
+
+**涉及文件**：`docs/PROJECT_HANDOFF.md` §19.6、`task_adapters/adapters.py`、`tests/test_task_adapters.py`
+
+---
+
+### `[实现]` R-11 Canonical Task Record + 三类 adapter — Agent
+
+**`schemas/canonical_task_record.schema.json`**：与模型无关的最终产物形态。`task_spec_id` 强制带版本（无版本引用无法复现）；`target_geometry` 必填且 `anchor_kind` 已按 §40 移除 centerline/trajectory/route；`capability_tags` 枚举已移除 thin_structure 等 6 项。
+
+**三路 adapter**：
+
+| adapter | 关键约束 |
+|---|---|
+| `pointcloud_native` | 产出 **ShareGPT 格式**；字段对齐依据是**实测** `3D-GRPO/grpo/dataset.py`（读 `conversations` 的 human/gpt 两轮、`point_clouds[0]` 只取第一个、`<point_cloud>` 占位符） |
+| `qwen_2d_metadata` | **铁律 3**：显式丢弃 `pointcloud_ref`，即使记录里有 |
+| `multimodal_3d` | 信息最全，因而最易泄漏 |
+
+**泄漏防护做成不可绕过的**：`render()` 是 final 语义，子类只实现 `_render()`，基类在其返回值上强制扫描。理由是这类 bug **不报错、不崩溃**，只会安静产出一批"模型能作弊的题"，直到有人发现指标好得可疑。
+
+**调试过程中修正的三类假阳性**（都是我最初的规则设计有误）：
+
+1. **`evidence.used_fields` 被当成泄漏原子** —— 但 program-first 任务里这些字段本就该可见，模型的任务正是组合它们推出答案。隐藏的只有 target。
+2. **短枚举词误判** —— `left` / `water` 是合法词汇。改为只把实体 ID、数值、以及长度 ≥8 的特异短语作为原子。
+3. **`target_type` 被当成答案** —— 它是答案的**类型标签**（"这是一道最近距离题"），与 `task_spec_id` 天然同名，纳入原子会让每条记录都误判。
+
+**两处精确豁免**（不放行整棵子树）：
+
+- ShareGPT 的 `gpt` 轮**就是标签**，模型生成时看不到它 —— 精确豁免 `conversations[1].value`；
+- MCQ 的选项必然含正确答案（否则无解），故豁免 human 轮；但**问题文本单独校验**，不得指明哪个选项对。
+
+**测试 31 项**，全库 **212 项通过**。
+
+**涉及文件**：`schemas/canonical_task_record.schema.json`、`task_adapters/`（新建包）、`core/metadata.py`、`tests/test_task_adapters.py`（新建）
+
+---
+
+### `[运维]` `[修正]` 自动备份从未生效 —— 重建为独立脚本 `scripts/blob_backup.sh` — 用户 + Agent
+
+**用户需求**：把 `/home/aiscuser/nyp` 的自动备份改到 blob_manager 启动目录下，目录名 `nyp_<MMDD>` 跟随当日日期，每 30 分钟检查并同步；**只维护一个目录**，日期变化时覆盖 + 改名，而不是每天新建。
+
+**排查中发现的事实，推翻了需求前提**：
+
+1. **备份从未成功过一次。** 8-23 建立至今 86 轮同步，`✓` 计数为 0，`output/liyan/nyp_0823/` 是空目录。原因是 `blob_manager.py` 把 SAS token **烤进**生成的 `.blob_backup.sh`，而当时用的是代码里 `DEFAULT_SAS_TOKEN`（`se=2026-04-05`，早已过期），每个文件都 403 `AuthenticationFailed`。日志照常滚动，失败不显眼。
+2. **路径本来就是对的。** `base_prefix=output/liyan` 正是 blob_manager 启动后 `ls` 所在的目录，备份指向 `output/liyan/nyp_0823`。用户以为跑到了容器根目录，实际是**因为它从来没传上去过**。
+3. **当前 token 权限 `sp=racwl` 没有 `d`。** 实测写入 ✓、服务端复制 ✓、`azcopy rm` ✗（403 `AuthorizationPermissionMismatch`）。而 Azure Blob 没有原生改名，改名 = 服务端复制 + 删源。
+
+**`[决策]` 缺删除权限时不硬改名。** `/home/aiscuser/nyp` 有 58G。若跨天后照常改名，旧目录删不掉，会在**多人共用**的容器里每天多堆一份 58G 全量副本。故改为：探测到无删除权限就跳过改名、继续同步到旧日期目录并记 ⚠ 告警（数据不丢，只是目录名滞后）。补上 `sp=racwdl` 的 token 后无需改代码即自动恢复改名。已登记 M-009。
+
+**`[决策]` 不修改 `blob_manager.py`。** 一度把上述逻辑实现进了它，用户指出该文件是多人公共的，已**完整还原**（1553 行，`_backup_generate_script` 回到原第 1225 行，无残留）。逻辑改为独立脚本，代价是 blob_manager 自带的 `backup` 子命令不再承载本项目备份。
+
+**新增 `scripts/blob_backup.sh`**（沿用 `gpu_guard.sh` 的 start/stop/status/once 形态）：
+
+- **token 每轮现读** `~/.blob_config.json`，不缓存不烤死 —— 直接消除上述第 1 条的故障模式；`status` 显示 token 剩余有效期与权限位；
+- **`nyp_{date}` 模板 + 状态文件**记录上轮实际目录，跨天触发改名（服务端复制 `old/*` → `new`，再删源）；
+- **删除权限用探针实测**（真传一个小 blob 再真删），不靠解析 `sp=` 字符串猜；
+- **排除 `secrets;logs/blob_backup.log`**；
+- **源路径加 `/*`**：azcopy 的目录拷贝会把源目录名多套一层，不加通配会落成 `nyp_0825/nyp/...`。实测通配**包含** `.git`、`.gitignore` 等隐藏项；
+- **区分「部分成功」与「整轮失败」**：azcopy 对 `CompletedWithErrors` 也返回 1，传输途中被改写的文件属此类，混为一谈正是旧方案没能暴露问题的地方。
+
+**`[决策]` 排除 `secrets/`（用户确认）。** blob 容器多人共用（同容器下有 `siqi`、`zzr`、`gradataset` 等他人目录），`secrets/.env.local` 传上去等同泄露。已验证远程 `nyp_0825/` 下无 `secrets`。
+
+**实测结果**：首轮全量 5902/5904 成功、56 GiB、约 90 秒（峰值 14 Gbps）；增量轮 5920 跳过、6–17 个更新、6–8 秒。恒定 2 个失败为 `logs/thinking.log`（占卡程序实时追加）与 `model_cache/vggt_omega/*.pt.incomplete`（下载中的半成品），属传输中被改写，下轮自动重试。
+
+**涉及文件**：新增 `scripts/blob_backup.sh`；`~/.blob_backup.json` 路径清空（避免 blob_manager 重新拉起旧机制）；`~/.blob_backup.pid` 由新脚本共同维护（让 blob_manager 启动时显示「备份运行中」并跳过询问）；`docs/MANUAL_INPUTS.md` 新增 M-009/M-010；`docs/PENDING_DELETIONS.md` 新增 X-004/X-005/X-006。
+
+**为什么**：一个从未生效的备份比没有备份更危险 —— 它提供了虚假的安全感。
+
 ### `[实现]` R-10 冻结 L0/L1/L2 Metadata Schema — Agent
 
 数据框架的核心缺口。此前 SPEC §16 只有文字描述，`schemas/` 里只有归一化场景契约。

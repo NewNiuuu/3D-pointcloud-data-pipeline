@@ -56,6 +56,7 @@ _SCHEMA_FILES = {
     "l1_entities": "l1_entities.schema.json",
     "l2_relations": "l2_relations.schema.json",
     "metadata_snapshot": "metadata_snapshot.schema.json",
+    "canonical_task_record": "canonical_task_record.schema.json",
 }
 
 

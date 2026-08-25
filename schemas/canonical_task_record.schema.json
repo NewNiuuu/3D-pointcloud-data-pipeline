@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NewNiuuu/3D-pointcloud-data-pipeline/schemas/canonical_task_record.schema.json",
+  "title": "Canonical Task Record",
+  "description": "**与模型无关**的任务标注。契约来源：SPEC §41、§19、§42、§50。\n\n这是本 Pipeline 的最终产物形态。同一条记录经三类 adapter 投影为不同模型的输入：\n- `qwen_2d_metadata`：2D 图像 + 任务局部 metadata（Qwen 不读点云，铁律 3）\n- `pointcloud_native`：点云 + 目标（3D-GRPO 的直接消费接口）\n- `multimodal_3d`：点云 + 图像 + 相机 + metadata\n\n**核心不变量：`hidden_target` 与 `evidence` 属于本记录，但 adapter MUST NOT 把它们投影进模型可见的载荷。** 这是铁律 6 在输出层的形式，由 `task_adapters/base.py` 的泄漏防护强制。",
+  "type": "object",
+  "required": [
+    "schema_version", "sample_id", "task_spec_id", "scene_id", "metadata_snapshot_id",
+    "capability_tags", "supervision_level", "inputs", "hidden_target", "target_geometry",
+    "evidence", "checker", "adapters", "provenance"
+  ],
+  "additionalProperties": false,
+
+  "properties": {
+    "schema_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "sample_id": { "type": "string", "minLength": 1 },
+    "task_spec_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9_.]+@\\d+\\.\\d+\\.\\d+$",
+      "description": "形如 3d_vqa.metric.minimum_distance@0.1.0。**必须带版本** —— 无版本的引用无法复现。"
+    },
+    "scene_id": { "type": "string", "minLength": 1 },
+    "metadata_snapshot_id": {
+      "type": "string", "minLength": 1,
+      "description": "引用 snapshot 而非散落的层文件 —— 保证编译时读到的是一致的 metadata。"
+    },
+    "split_group_id": {
+      "type": ["string", "null"],
+      "description": "铁律 11：同组绑定同一 split。发布时按此分组，不得逐样本随机切。"
+    },
+
+    "capability_tags": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "enum": [
+          "perception", "metric_geometry", "metric_terrain",
+          "perception_reliability", "failure_attribution", "landability",
+          "viewpoint_reasoning", "cross_view_identity", "visibility_occlusion",
+          "temporal_change", "illumination_robustness", "uncertainty",
+          "grounded_language"
+        ]
+      },
+      "description": "SPEC §49 的覆盖矩阵维度。2026-08-25 已移除 thin_structure / temporal_motion / occupancy_navigation / flight_safety / active_perception / planning_dialogue。"
+    },
+    "low_altitude_tags": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "nadir_view", "uav_pose_altitude", "weak_depth_cue",
+          "water_surface", "textureless_surface", "reflection",
+          "terrain_relief", "landing_candidate", "repeated_flight", "evening_run"
+        ]
+      },
+      "default": [],
+      "description": "SPEC §43.2 的低空特异性信号。**声称低空特色的任务必须至少有一项**。"
+    },
+
+    "supervision_level": {
+      "enum": ["strong", "deterministic_derived", "filtered_pseudo", "weak", "language_generated"],
+      "description": "SPEC §42。strong 与 deterministic_derived 适合做评测数据；其余原则上只进训练集。"
+    },
+
+    "inputs": { "$ref": "#/$defs/inputs" },
+
+    "hidden_target": {
+      "type": "object",
+      "required": ["target_type"],
+      "additionalProperties": true,
+      "description": "**MUST NOT 出现在任何 adapter 的模型可见载荷中**（铁律 6）。"
+    },
+
+    "target_geometry": {
+      "$ref": "#/$defs/target_geometry",
+      "description": "SPEC §41：每个 target MUST 映射到至少一个具体 3D 锚点。只有一个字符串 ID 不算 —— 那样点云模型无从消费。"
+    },
+
+    "evidence": { "$ref": "#/$defs/evidence" },
+    "checker": { "$ref": "#/$defs/checker" },
+
+    "ambiguity": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "SPEC §43.3：歧义 MUST 显式表达，不得靠模型硬猜。",
+      "properties": {
+        "is_ambiguous": { "type": "boolean", "default": false },
+        "reason": { "type": ["string", "null"] },
+        "equivalent_answers": { "type": "array", "items": { "type": "string" }, "default": [] }
+      },
+      "default": { "is_ambiguous": false }
+    },
+
+    "adapters": {
+      "type": "array", "minItems": 1,
+      "items": { "enum": ["qwen_2d_metadata", "pointcloud_native", "multimodal_3d"] },
+      "description": "本记录声明支持的 adapter。`pointcloud_native` 是 3D-GRPO 的消费接口。"
+    },
+
+    "quality": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "status": { "enum": ["pass", "warn", "quarantine", "reject"] },
+        "geometry_confidence": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "three_d_necessity_verified": { "type": "boolean", "default": false },
+        "leakage_checked": { "type": "boolean", "default": false }
+      },
+      "default": {}
+    },
+
+    "provenance": {
+      "type": "object",
+      "required": ["created_at", "code_version", "task_spec_version"],
+      "additionalProperties": true,
+      "properties": {
+        "created_at": { "type": "string", "minLength": 1 },
+        "code_version": { "type": "string", "minLength": 1 },
+        "task_spec_version": { "type": "string", "minLength": 1 },
+        "prompt_template": { "type": ["string", "null"] },
+        "notes": { "type": ["string", "null"] }
+      }
+    }
+  },
+
+  "$defs": {
+    "inputs": {
+      "type": "object",
+      "required": ["visible_metadata_fields"],
+      "additionalProperties": false,
+      "properties": {
+        "pointcloud_ref": {
+          "type": ["string", "null"],
+          "description": "点云文件路径。`pointcloud_native` 与 `multimodal_3d` 必需；`qwen_2d_metadata` 忽略它（铁律 3：Qwen 不读点云）。"
+        },
+        "visual_inputs": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "camera_refs": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "observer_pose_id": { "type": ["string", "null"] },
+        "visible_metadata": {
+          "type": "object", "additionalProperties": true, "default": {},
+          "description": "已按 Task Spec 的字段掩码裁剪后的 metadata 子图。**编译器负责保证其中不含隐藏 target。**"
+        },
+        "visible_metadata_fields": {
+          "type": "array", "items": { "type": "string" },
+          "description": "上面那份 metadata 实际包含的字段路径。用于泄漏检查与审计。"
+        },
+        "question": { "type": ["string", "null"] },
+        "choices": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "object", "required": ["key", "text"], "additionalProperties": false,
+            "properties": { "key": { "type": "string", "pattern": "^[A-Z]$" }, "text": { "type": "string" } }
+          },
+          "description": "可选的单选项渲染。**存在时选项顺序 MUST 已按 scene_id 确定性打乱** —— 否则正确答案的位置会成为捷径。"
+        }
+      }
+    },
+
+    "target_geometry": {
+      "type": "object",
+      "required": ["anchor_kind"],
+      "additionalProperties": false,
+      "description": "SPEC §41 允许的锚点类型（2026-08-25 已移除 centerline / trajectory / route）。",
+      "properties": {
+        "anchor_kind": {
+          "enum": ["point_indices", "point_mask", "object_obb", "surface_plane", "region", "camera_pose", "spatial_relation"]
+        },
+        "entity_ids": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "point_indices_uri": { "type": ["string", "null"] },
+        "obb": { "type": ["object", "null"], "additionalProperties": true },
+        "plane": { "type": ["object", "null"], "additionalProperties": true },
+        "reference_uri": { "type": ["string", "null"] }
+      }
+    },
+
+    "evidence": {
+      "type": "object",
+      "required": ["used_entities", "used_fields", "derivation_program"],
+      "additionalProperties": false,
+      "description": "**MUST NOT 出现在模型可见载荷中** —— 它直接指向答案的推导路径。",
+      "properties": {
+        "used_entities": { "type": "array", "items": { "type": "string" } },
+        "used_fields": { "type": "array", "items": { "type": "string" } },
+        "derivation_program": { "type": "string", "minLength": 1 },
+        "derivation_inputs": { "type": "object", "additionalProperties": true, "default": {} }
+      }
+    },
+
+    "checker": {
+      "type": "object",
+      "required": ["name", "version"],
+      "additionalProperties": true,
+      "description": "SPEC §27 G3：缺少 checker 是硬失败 MISSING_CHECKER —— 判不了分的题不该被生成。",
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "tolerance_m": { "type": ["number", "null"], "minimum": 0 },
+        "lateral_deadzone_deg": { "type": ["number", "null"], "minimum": 0 }
+      }
+    }
+  }
+}

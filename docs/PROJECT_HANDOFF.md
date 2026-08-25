@@ -1069,6 +1069,24 @@ SPEC §14.6/§14.7 的规则可直接启用，无需重写。
 README 第四层与固定原则、AGENT_SKILL_SYSTEM_DESIGN §4.6、三个 Task Spec 的
 `low_altitude_specificity`（其中 metric 任务原声称「候选实体包含电线、杆塔」为**事实错误**，已改正）。
 
+### 19.6 标注格式契约：ShareGPT（2026-08-25）
+
+**[用户已确认]**
+
+标注格式**尽量满足 ShareGPT 格式**：
+
+```json
+{"conversations": [{"from": "human", "value": "..."},
+                   {"from": "gpt",   "value": "..."}]}
+```
+
+**3D-GRPO 与 SFT 都会依据数据的具体类型再做调整** —— 因此下游训练框架的现状
+（如现行 reward 只支持单选字母匹配）**不构成对数据设计的约束**。
+
+对本 Pipeline 的含义：`pointcloud_native` adapter 的产出目标是**规范的 ShareGPT 记录**，
+而非迁就某个框架的当前实现。adapter 的职责是**把判分所需信息给全**
+（checker 名、容差、hidden_target），训练侧据此按数据类型实现 reward。
+
 ### 19.4 层级推进顺序调整：第三层降为润色层（2026-08-25）
 
 **[用户已确认]**

@@ -17,6 +17,7 @@
 | # | 需求 | 来源 | 阻塞原因 |
 |---|---|---|---|
 | R-02 | 米制尺度精度验证 | 商讨 | **M-008** 需 `calibration_results.py`（相机-LiDAR 外参），只在 OneDrive/GDrive 完整版根目录。没有它 `domain_calibrated` 无法置位，绝对米制任务不解锁 |
+| R-20 | Blob 备份目录名跟随日期 | 用户 | **M-009** 需带删除权限的 SAS token（`sp=racwdl`）。当前 `racwl` 删不掉旧目录，跨天后目录名停在旧日期。**备份本身已正常运行，数据不丢**，只是改名降级。另有 **M-010**：当前 token **2026-08-29 过期** |
 
 ### 🟡 待办（现在就能做）
 
@@ -28,7 +29,6 @@
 | # | 需求 | 来源 | 层 | 说明 |
 |---|---|---|---|---|
 | R-01 | **VGGT-Ω 几何重建（L2-S1）** | 商讨 | 二 | **阻塞已解除** —— 权重经魔搭社区获取（`facebook/VGGT-Omega`，官方命名空间，未 gating）。下载完成后即可跑通第二层主干 |
-| R-11 | **Canonical Task Record + 三类 adapter** | 建议 | 四 | 定义**最终输出长什么样**。`pointcloud_native` 是 3D-GRPO 的直接消费接口 |
 | R-12 | L2-S6 任务编译（**普通代码，不封装 Skill**） | 建议 | 二→四 | 从 metadata 到任务记录的桥。补上**运行时**泄漏检查（现在只有静态的） |
 | R-13 | L2-S3 提升融合 / L2-S4 派生 | 建议 | 二 | 代码可先按契约写好，接口留给 VGGT-Ω 深度 |
 | R-14 | 专家模型产出真实 artifact | 建议 | 二 | 模型已部署但未接线，按 §14.8 I/O 契约存盘 |
@@ -78,6 +78,7 @@
 | R-46 | 冻结契约（vertical slice 1） | 建议 | `core/`：ID、状态机、枚举、57 错误码、artifact 血缘 |
 | R-47 | Dataset Adapter（vertical slice 2） | 建议 | `adapters/uavscenes/`，3 个场景落盘 |
 | R-48 | 确定性几何 + checker（vs 7） | 建议 | `geometry/` 17 函数 + `checkers/` 4 个 |
+| R-11 | **Canonical Task Record + 三类 adapter** | 建议 | schema + 三路 adapter + 基类强制的泄漏防护 + 31 项测试。产出为 **ShareGPT 格式** |
 | R-10 | **冻结 L0/L1/L2 Metadata Schema** | 建议 | 4 个 schema（版本 0.1.0）+ `core/metadata.py` 跨层校验 + 39 项测试。新增 `surface` 实体类型（C2/C3 的锚点）；L2 强制 `derivation` |
 | R-49 | Task Spec（vertical slice 8） | 建议 | 4 个，覆盖 3 个任务族 |
 | R-50 | 专家模型许可核验与部署 | 用户 | 9 张专家卡；7 个已部署验证 |
