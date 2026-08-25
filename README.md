@@ -217,7 +217,7 @@ tests/         231 项，全部通过
 | # | 需求 | 产出 |
 |---|---|---|
 | R-60 | 设计改动立即同步文档 | `CLAUDE.md` 规则 1 + 文档职责映射表 |
-| R-61/62 | 占卡程序保持挂载 + 守护 | `CLAUDE.md` 规则 2 + `scripts/gpu_guard.sh`（20 分钟一轮，实测自动拉起） |
+| R-61/62 | 占卡程序保持挂载 + 守护 | `CLAUDE.md` 规则 2 + `nyp/scripts/gpu_guard.sh`（**在本仓库之外**，20 分钟一轮，实测自动拉起） |
 | R-63 | 人工输入登记簿 | `docs/USER_ACTIONS.md` + `secrets/` 自屏蔽目录 |
 | R-64/65 | 变更日志 + 待删除清单 | `docs/CHANGELOG.md`（六标签只追加）+ `USER_ACTIONS.md` |
 | R-66 | 同步到独立 GitHub 仓库 | `NewNiuuu/3D-pointcloud-data-pipeline` |
