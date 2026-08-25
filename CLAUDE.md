@@ -221,6 +221,26 @@ scripts/gpu_guard.sh status     # 验证确实占上了
    或先 `pgrep` 拿到 PID 再精确 `kill`。
 4. 状态一律用 `gpu_guard.sh status` 或 `nvidia-smi` 确认，不要凭记忆假设占卡程序还活着。
 
+### 常驻推理服务（vLLM 等）用完必须显式停
+
+**这类服务不会自己释放显存。** vLLM 起来后一直占着
+`--gpu-memory-utilization` 划走的那块（当前配置 4 卡 × 35.7 GB），
+**哪怕零请求、利用率 0%**。别人看 nvitop 只看到「卡满、算力闲」，
+既用不了也不知道找谁 —— 2026-08-25 实际发生过一次。
+
+```bash
+bash /home/aiscuser/nyp/3D-Anything/stop_qwen35.sh          # 停服务 + 校验显存释放 + 挂回占卡
+bash /home/aiscuser/nyp/3D-Anything/watch_qwen35_idle.sh start   # 空闲 30 分钟自动停
+```
+
+三条要点：
+
+1. **别只靠「记得去停」** —— 起服务时顺手把空闲看门狗挂上；
+2. **判断闲置要看请求数**，不能看显存或利用率 —— 后两者区分不出
+   「在服务」与「闲置」。看门狗读 `/metrics` 的累计请求计数器；
+3. **残留检查要排除占卡程序** —— 它占着 27 GB 是正常的，
+   别把 `thinking.py` 当成 vLLM 残留 worker 去 kill。
+
 ### 无关进程（不要误杀）
 
 ```
