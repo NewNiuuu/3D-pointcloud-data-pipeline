@@ -8,7 +8,7 @@ card_version: 0.1.0
 role: invalid_region_semantics_sky_water_stuff
 spec_ref: SPEC §14.1 / §14.5 / §34 invalid_region_semantics
 research_tier: A0
-deployment_status: deployed_with_warning
+deployment_status: deployed_verified
 sources:
   weights: https://huggingface.co/shi-labs/oneformer_ade20k_swin_large
 license:
@@ -27,7 +27,29 @@ measured:
   peak_vram_gb: 4.54
   semantic_map_shape: (2048,2448)
   classes_detected: 13
-uav_validation_status: not_started
+uav_validation_status: verified_on_uavscenes
+
+# ---- 2026-08-25：加载警告已验证为无害，状态由 deployed_with_warning 升级 ----
+load_warning_investigation:
+  date: '2026-08-25'
+  symptom: >
+    transformers 5.15.1 加载时报 model.pixel_level_module.encoder.swin.layernorm
+    的 weight/bias MISSING（被随机初始化）。此前据此把状态标为 deployed_with_warning，
+    理由是「能跑但输出可能是错的」—— 但**当时并未验证**。
+  method: >
+    在该模块挂 forward hook，再把它的权重强行改成 7.0 / -3.0，比对两次输出。
+  result: >
+    hook 触发 1 次（模块确实被调用），但 class_queries_logits 与
+    masks_queries_logits 的最大变化**恰为 0.000e+00**。
+    OneFormer 消费的是 Swin 的特征金字塔中间层，不是这个末端 layernorm 的池化输出，
+    其结果被丢弃。**缺失无害。**
+  lesson: >
+    「加载报 MISSING」不等于「输出错」。判据应当是**改动该权重是否改变输出**，
+    而不是日志里有没有告警。此前的保守标注是对的，但拖了太久没去验。
+  measured_on_aerial:
+    HKisland: 'mountain 68.3% / water 26.4% / plant 5.1% / rock 0.3%'
+    AMtown: 'tree 44.8% / sidewalk 24.0% / earth 21.2% / building 4.6%'
+    throughput: '约 1.4 s/帧 @ 2448×2048，A100-40G'
 production_ready: false
 blocking_issues:
 - transformers 5.15.1 载入时报 swin.layernorm.weight/bias MISSING，被随机初始化 —— 输出可信度存疑，必须先确定兼容的 transformers

@@ -1,0 +1,46 @@
+# Expert Card: 空中飞行器感知（无人机/有人机/鸟）—— 【尚无可用专家】
+# Contract: DESIGN.md §23.2 / §46.6 提前准备清单
+# 调研日期: 2026-08-25
+
+expert_id: airborne_object_detector
+display_name: 空中飞行器检测（drone / aircraft / bird）
+card_version: 0.1.0
+role: airborne_object_detection_and_track
+spec_ref: DESIGN §46.5（动态碰撞风险 backlog）
+research_tier: A0
+deployment_status: not_available
+
+serves_backlog:
+  - R-34  # 动态碰撞风险、TTC、扫掠体重叠
+  - R-35  # Next-best-view / 主动感知（需知道空中有什么）
+
+survey:
+  date: '2026-08-25'
+  conclusion: >
+    **同样没有可直接使用的预训练专家。** HF 上 drone/uav/bird/aircraft detection
+    的命中项多为 0 下载的习作。有分量的资源是**数据集与竞赛**，不是可复用的模型权重。
+  available_datasets:
+    - name: AOT (Airborne Object Tracking, Amazon Prime Air)
+      what: 约 4943 段飞行序列、590 万帧、330 万条 2D 标注（框 + 类别 + 距离）
+      link: https://www.aicrowd.com/challenges/airborne-object-tracking-challenge
+      note: 规模极大，含**距离**标注 —— 对 TTC 类任务尤其有价值
+    - name: AOD4 (Airborne-Object-Detection-4)
+      what: 约 22516 张，4 类（airplane / helicopter / drone / bird）
+      link: https://universe.roboflow.com/airborne-object-detection/airborne-object-detection-4-aod4
+      note: 体量适中，适合先做可行性验证；托管在 Roboflow，非稳定依赖
+  implication: >
+    与薄结构同理：准备 = 训练，不是下载。
+    但 AOT 带**距离**标注这一点值得注意 —— 它可能直接支撑 R-34 的 TTC 真值，
+    而不必依赖我们自己的深度估计。引入时应优先核验这一点。
+  caveat: >
+    **本项目当前数据（近垂直下视航测）里几乎不存在空中目标**，
+    因此该专家在 UAVScenes 上无从验证，只能等前视/侧视数据集（R-37）。
+    这与薄结构不同 —— 薄结构至少在地面场景里偶有出现。
+
+preparation_checklist:
+  license_verified: false
+  weights_obtainable: false
+  deployment_verified: false
+  io_contract_measured: false
+
+uav_validation_status: blocked_by_dataset   # 见 caveat

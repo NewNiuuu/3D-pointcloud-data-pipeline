@@ -207,9 +207,27 @@ def _backproject(ys, xs, d, K, T_wc):
 
 
 def extract_l1(l0_bundle: dict[str, Any], cfg: ExtractionConfig,
-               class_names: dict[int, str] | None = None) -> dict[str, Any]:
-    """把逐像素语义标注反投影成 L1 对象实体。"""
+               class_names: dict[int, str] | None = None,
+               *, semantic_source: str = "native",
+               segmenter: Any = None) -> dict[str, Any]:
+    """把逐像素语义反投影成 L1 对象实体。
+
+    ``semantic_source``：
+
+    - ``"native"`` —— 用数据集自带的人工标注。质量高，但**只有少数数据集有**，
+      方法因此不可移植（铁律 14）。留着它是为了**当对照组**：
+      同一批场景两条路各跑一遍，就能量化「改用模型后损失了多少」。
+    - ``"model"`` —— 用 :class:`pipeline.segmentation.SemanticSegmenter`。
+      **这是符合铁律 14 的生产路径** ——「只要有图就能跑」。
+
+    传 ``"model"`` 时必须给 ``segmenter``（模型加载 ~1 GB，由调用者持有以便复用）。
+    """
     from PIL import Image
+
+    if semantic_source not in ("native", "model"):
+        raise ValueError(f"semantic_source 只能是 native/model，实得 {semantic_source!r}")
+    if semantic_source == "model" and segmenter is None:
+        raise ValueError("semantic_source='model' 时必须传 segmenter")
 
     depth, conf = l0_bundle["depth"], l0_bundle["conf"]
     frames, cameras = l0_bundle["frames"], l0_bundle["cameras"]
@@ -218,19 +236,33 @@ def extract_l1(l0_bundle: dict[str, Any], cfg: ExtractionConfig,
     class_names = class_names or {}
     conf_floor = float(np.percentile(conf, _CONF_PERCENTILE_FLOOR))
 
+    seg_maps: list[Any] = []
+    if semantic_source == "model":
+        paths = [str(cfg.scene_dir / f["image_uri"]) for f in frames]
+        seg_maps = segmenter.segment(paths, target_hw=(H, W))
+
     objects: list[dict[str, Any]] = []
     counter = 0
     for i, f in enumerate(frames):
-        sem_rel = (f.get("native_labels") or {}).get("semantic_2d")
-        if not sem_rel:
-            continue
-        arr = np.array(Image.open(cfg.scene_dir / sem_rel).resize((W, H), Image.NEAREST))
-        sem = arr[..., 0] if arr.ndim == 3 else arr
+        if semantic_source == "model":
+            sem = seg_maps[i].canonical
+            names = {k: n for k, n in enumerate(seg_maps[i].canonical_names)}
+            skip_ids = {seg_maps[i].canonical_names.index("sky")}
+        else:
+            sem_rel = (f.get("native_labels") or {}).get("semantic_2d")
+            if not sem_rel:
+                continue
+            arr = np.array(
+                Image.open(cfg.scene_dir / sem_rel).resize((W, H), Image.NEAREST))
+            sem = arr[..., 0] if arr.ndim == 3 else arr
+            names = class_names
+            skip_ids = {0}                    # 0 = unlabeled
         K = np.asarray(cameras[i]["K"], dtype=np.float64)
         T_wc = np.asarray(cameras[i]["T_world_from_camera"], dtype=np.float64)
 
         for cls in np.unique(sem):
-            if cls == 0:                       # 0 = unlabeled
+            # sky 的深度不可信（§14.5 的 sky 原因码），unlabeled 无语义 —— 都不成实体
+            if int(cls) in skip_ids:
                 continue
             for pix in _components(sem == cls):
                 if len(pix) < _MIN_COMPONENT_PIXELS:
@@ -247,7 +279,7 @@ def extract_l1(l0_bundle: dict[str, Any], cfg: ExtractionConfig,
                 counter += 1
                 objects.append({
                     "object_id": f"<obj_{counter:03d}>",
-                    "category": class_names.get(int(cls), f"class_{int(cls)}"),
+                    "category": names.get(int(cls), f"class_{int(cls)}"),
                     "geometry": {
                         "centroid": centroid.tolist(),
                         "aabb": [*lo.tolist(), *hi.tolist()],
@@ -268,7 +300,10 @@ def extract_l1(l0_bundle: dict[str, Any], cfg: ExtractionConfig,
                     },
                     "provenance": {
                         "source_frames": [f["frame_id"]],
-                        "producers": ["uavscenes_native_semantic", "VGGT-Omega/1b_512"],
+                        "producers": [
+                            ("OneFormer/" + segmenter.VERSION) if semantic_source == "model"
+                            else "uavscenes_native_semantic",
+                            "VGGT-Omega/1b_512"],
                         "derivation_program": "semantic_mask_backprojection",
                         "supervision_level": "deterministic_derived",
                     },
@@ -287,7 +322,8 @@ def extract_l1(l0_bundle: dict[str, Any], cfg: ExtractionConfig,
             "created_at": _now(),
             "code_version": CODE_VERSION,
             "l0_geometry_ref": str(l0_bundle["out_dir"] / "l0_geometry.json"),
-            "notes": ("实体 = 逐像素语义标注的连通域反投影；未做跨帧融合"
+            "semantic_source": semantic_source,
+            "notes": (f"实体 = 逐像素语义（{semantic_source}）的连通域反投影；未做跨帧融合"
                       "（那是 L2-S3 / R-13）；跨帧只做了质心邻近的**粗**归并，见 _merge_across_frames。"),
         },
     }

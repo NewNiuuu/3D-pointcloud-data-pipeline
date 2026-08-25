@@ -68,6 +68,36 @@
 
 ---
 
+## 专家模型：准备与选型
+
+### 细线检测和空中目标感知，生态里没有可用的预训练专家
+
+HF 上以 powerline / transmission line / cable / drone detection / airborne object 检索，命中的**全是零下载量的个人习作**；搜 `ttpla` 出来的是同名但无关的 Stable Diffusion ControlNet。**现成的是数据集，不是专家**：TTPLA（1100 张航拍电力线实例分割）、AOT（Amazon Prime Air，590 万帧、含距离标注）、AOD4（22516 张、4 类）。
+
+**为什么重要**：这**改变了排期的性质**。「准备这两个专家」不是「下载并测试」，而是「拿公开数据集微调一个检测器」，工作量差一个量级。按前者估期会严重低估。
+
+**一个机会**：AOT 带**距离**标注，可能直接支撑 TTC 类任务的真值，不必依赖我们自己的深度估计——引入时应优先核验这一点。
+
+📄 `registry/experts/thin_structure_detector.yaml`、`airborne_object_detector.yaml`
+
+### 语义来源从人工标注换成模型，实体数不降反升
+
+R-14 把 L1 实体的语义来源从数据集自带的人工标注换成 OneFormer。同样 12 帧、同样场景：
+
+| 场景 | native（人工） | model（OneFormer） |
+|---|---|---|
+| HKisland01_0013 | 5 实体 | 6 实体 |
+| AMtown02_0000 | 12 实体（`cls1`/`cls2`/`cls19`…） | **20 实体**（building/ground_paved/vehicle…） |
+| GNSS01_0041 | 8 实体 | 12 实体 |
+
+**为什么重要**：直觉上「换成模型 = 降级」，实测不是。AMtown 的人工标注给的是**我们从没反查过的类别 ID**（`cls1`、`class_15`），而模型给的是**直接对应下游判据的类别**——C2 判可降落要区分 building / ground_paved / vehicle，模型这版可用得多。
+
+**注意这不等于模型更准**：没有对真值验证过，只能说更**可用**（有名字、对齐我们的类别体系）、数量相当。
+
+**顺带抓到一个安全问题**：类别映射的第一版把 `person` 归进了 `other`。C2 的核心判据就是「平坦 ≠ 可降落：水面平、车顶平、**人群上方也平**」——把人归进 other 等于把最危险的降落区放进候选。已单列为硬排除类。台阶、长椅、雕塑等街道家具同样从 other 移进 structure。
+
+---
+
 ## 3D 增益（R-43，铁律 5 的准入线）
 
 ### 打乱 metadata 比不给 metadata 还差 —— 这才是「模型真在用它」的证据
@@ -215,7 +245,7 @@ HKisland01 前 32 帧相机只移动了 **0.29 m**（起飞悬停段），多视
 
 **为什么重要**：残差是最顺手的指标，也最容易骗人。判据要看基线长度、帧数和轨迹构型，**不能看残差**。
 
-## 专家模型
+## 专家模型：部署实测
 
 ### 三个深度模型给出三个不同答案，而且都对不上 LiDAR
 
@@ -266,11 +296,17 @@ MoGe 在自己的 conda 环境里正常工作，输出 `points`/`depth`/`normal`
 
 📄 `OPERATIONS.md`
 
-### OneFormer 能跑，但输出可能是错的
+### ~~OneFormer 能跑，但输出可能是错的~~ → 已验证：缺失权重无害
 
-`transformers 5.15.1` 加载时 `swin.layernorm.weight/bias` 报 `MISSING`，被**随机初始化**了。模型照常输出 13 类语义图，看不出异常。
+`transformers 5.15.1` 加载时 `swin.layernorm.weight/bias` 报 `MISSING`，被随机初始化。我据此把它标成「可能是错的、不启用」——**但当时没验**。
 
-**为什么重要**：这种"能跑但悄悄是错的"比直接报错危险得多。而它产出的正是天空/水面无效几何掩码，错了会污染整个质量门禁。**确定兼容版本前不启用。**
+**2026-08-25 验了**：给该模块挂 forward hook，再把权重强行改成 7.0/-3.0，比对输出。hook 触发了 1 次（模块确实被调用），但 `class_queries_logits` 与 `masks_queries_logits` 的最大变化**恰为 0.000e+00**。OneFormer 取的是 Swin 特征金字塔的中间层，这个末端 layernorm 的结果被丢弃。
+
+**为什么重要**：**「加载报 MISSING」不等于「输出错」。** 判据应当是「改动该权重是否改变输出」，而不是日志里有没有告警。当初保守标注是对的，但**拖了太久没去验** —— 期间一直把它当成不可用，白白挡住了 R-14。
+
+它现在是 L1 实体的语义来源，状态升为 `deployed_verified`。
+
+📄 `registry/experts/oneformer_ade20k_swin_large.yaml`
 
 📄 `OPERATIONS.md`
 
