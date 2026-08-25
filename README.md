@@ -333,20 +333,74 @@ flowchart TD
 
 ---
 
-## 当前进度
+## 当前进度（按四层架构，2026-08-25）
 
-| 模块 | 状态 |
+### 第一层：数据源注册与选择
+
+| 环节 | 状态 |
 |---|---|
-| 实施边界决策 | 首批数据集、metric 政策、首批任务、Qwen 部署、许可政策已于 2026-08-24 确定 |
-| 数据集调研 | 已形成 22 个新增候选；**UAVScenes 已下载并通过 G0 门禁**（35 GB，interval=5），其余未落盘 |
-| 总体架构 | 已完成设计 |
-| Metadata Schema | 已有 L0–L3 草案，尚未冻结 |
-| 2D/几何专家调研 | 已完成官方资料调研和首版组合建议，尚未实测 |
-| Task Spec / Prompt 体系 | 已完成总体设计，尚未实现 |
-| 下游任务体系 | 已独立为第四层，已完成能力分类和首批顺序设计 |
-| Agent / Skill | 已定义 8 个 Skill，尚未创建 |
-| Pipeline 代码 | 未开始 |
-| 服务器实验 | 未开始；VGGT-Ω 尚未安装，可获取性待核验 |
+| 首批数据集选定 | ✅ UAVScenes（用户确认） |
+| Dataset Card + 许可审查 + 文件清单 | ✅ `registry/datasets/uavscenes/` |
+| G0 门禁 | ✅ `pass_with_constraints`（CC BY-NC-SA 4.0） |
+| 小样本落盘与结构核验 | ✅ 35 GB，20 run / 4 split group，帧级契约已实测 |
+| 其余 21 个候选建卡 | ⬜ 未做（Phase 2） |
+| `dataset-registry-manager` Skill | ⬜ 规则已在文档，未落为 Skill |
+
+**这一层对首批数据集已经走完。**
+
+### 第二层：2D→3D Metadata 提取与场景构建
+
+| 阶段 | 内容 | 状态 |
+|---|---|---|
+| L2-S0 | Dataset Adapter / 场景切分 | ✅ `adapters/uavscenes/`，3 个场景已落盘 |
+| L2-S1 | **VGGT-Ω 几何重建** | ❌ **权重待批（M-007）—— 本层的卡点** |
+| L2-S2 | 2D/视频专家推理 | ⚠️ 模型已部署验证，**尚未产出 artifact** |
+| L2-S2B | 独立几何专家 | ⚠️ 同上（MoGe-3 / DA3 已跑通） |
+| L2-S3 | 2D→3D 提升与融合 | ❌ 依赖 S1 的深度 |
+| L2-S4 | Metadata 派生 | ⚠️ 几何函数已备（`geometry/`），无输入可派生 |
+| L2-S5 | 质量与 provenance | ⚠️ artifact 信封已备（`core/artifact.py`），门禁未实现 |
+| L2-S6 | **Task 编译** | ⬜ 未开始 ← `task-prompt-compiler` |
+| L2-S7 | 模型生成 | ⏸️ 按决策暂缓 |
+| L2-S8 | 样本校验 | ⚠️ checker 已备，auditor 未实现 |
+
+**这一层卡在 S1。** S0 完成，S2/S2B 的模型就位但没接线，S3–S5 全部等 S1 的深度。
+
+### 第三层：Agent、Skill、编译、校验与质量监管
+
+| 内容 | 状态 |
+|---|---|
+| 冻结契约（ID / 状态机 / 枚举 / 57 错误码 / artifact 血缘） | ✅ `core/` |
+| 8 个 Skill | ⬜ **0 个已建目录**；部分规则已硬编码进 `core/task_spec.py` 与 `checkers/` |
+| 质量门禁 G0 | ⚠️ UAVScenes 手工走过，未实现为可复用门禁 |
+| 质量门禁 G1–G6 | ⬜ 未实现 |
+| Orchestrator 状态机 | ⚠️ 迁移规则已实现并测试，**驱动它的执行器未写** |
+
+**这一层有骨架无肌肉**：契约与规则都在，但没有一个 Skill 真正跑起来。
+
+### 第四层：下游任务设计与能力补全
+
+| 内容 | 状态 |
+|---|---|
+| Task Spec | ✅ 4 个，覆盖用户确认的 3 个任务族 |
+| 确定性推导程序与 checker | ✅ `geometry/` 17 个函数 + `checkers/` 4 个 |
+| 输出 schema | ✅ `schemas/answers/` 4 个 |
+| Canonical Task Record | ⬜ 契约在 SPEC §41，未实现 |
+| 三类 adapter（qwen / pointcloud_native / multimodal_3d） | ⬜ Spec 中已声明，未实现 |
+| 能力覆盖矩阵 | ⬜ 未做 |
+
+**这一层的"配方"齐了，"产线"没建。**
+
+### 一句话总结
+
+**第一层走完，第四层定好了规格，第三层有契约无执行，第二层卡在 VGGT-Ω 权重。**
+当前所有可推进的工作都在"等权重期间把周边机器造好"这个范畴内。
+
+### 阻塞项
+
+| 编号 | 内容 | 影响 |
+|---|---|---|
+| M-007 | VGGT-Ω 权重（已申请） | 第二层 S1 及其下游全停 |
+| M-008 | 相机-LiDAR 标定文件 | 米制精度无法验证，`domain_calibrated` 无法置位 |
 
 ### 已产出代码与产物
 
