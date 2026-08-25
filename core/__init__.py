@@ -4,7 +4,7 @@
 minimal schemas, and error codes"的实现，是全 Pipeline 的单一事实来源。
 
 修改本包中的任何枚举值或状态迁移规则，等同于修改架构契约，
-**必须同步修改 `docs/CLAUDE_CODE_PROJECT_SPEC.md` 并记入 `docs/CHANGELOG.md`**。
+**必须同步修改 `docs/DESIGN.md` 并记入 `docs/CHANGELOG.md`**。
 """
 
 from .artifact import Artifact, ArtifactKind, content_digest, new_artifact_id

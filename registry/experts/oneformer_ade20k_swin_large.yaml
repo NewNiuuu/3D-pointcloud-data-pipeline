@@ -1,5 +1,5 @@
 # Expert Card: OneFormer ADE20K Swin-L
-# Contract: CLAUDE_CODE_PROJECT_SPEC.md §23.2 (expert-registry-manager)
+# Contract: DESIGN.md §23.2 (expert-registry-manager)
 # 核验日期: 2026-08-24
 
 expert_id: oneformer_ade20k_swin_large

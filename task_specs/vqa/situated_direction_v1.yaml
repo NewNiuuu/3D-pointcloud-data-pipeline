@@ -1,5 +1,5 @@
 # situated 3D VQA —— 观察者相对方位
-# 契约：CLAUDE_CODE_PROJECT_SPEC.md §24、§26.2、§43、§45
+# 契约：DESIGN.md §24、§26.2、§43、§45
 # 首批任务之一（2026-08-24 用户确认的 "metric_or_situated" 中的 situated 分支）
 
 task_id: 3d_vqa.situated.observer_relative_direction
@@ -88,7 +88,7 @@ eligibility:
   require_all:
     - observer_forward_available: true
     - entity_centroid_available: true
-    - camera_baseline_m_at_least: 2.0    # 必要不充分条件。见 SCALE_RECOVERY_ANALYSIS.md
+    - camera_baseline_m_at_least: 2.0    # 必要不充分条件。见 FINDINGS.md 附录 B
                                          # 「重大修正」：该阈值无实证支持，仅用于排除
                                          # 明显退化的轨迹，不构成尺度可信的依据
     - domain_calibrated: true            # 唯一充分条件：尺度须经独立真值验证。

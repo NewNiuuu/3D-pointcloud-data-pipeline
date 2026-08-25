@@ -1,4 +1,4 @@
-# PROJECT_HANDOFF
+# 项目决策与依据（原 PROJECT_HANDOFF）
 
 > ## ⚠️ 阅读本文前必读（2026-08-25）
 >
@@ -20,6 +20,27 @@
 > 交接日期：2026-08-23（Asia/Shanghai）  
 > 用途：让未参与此前对话的新 Codex Agent 仅凭本文即可继续调研、设计和实施。  
 > 当前状态：完成第一轮低空数据集调研、已有方案草图审阅、3D metadata 与任务体系初步设计；尚未开始正式 Pipeline 代码实现。
+
+
+> ### 📁 2026-08-25 文档重构：旧文件名映射
+>
+> 本文档**只追加不改写**，因此下方历史条目中的文件名保持原样。对照表：
+>
+> | 历史条目中的名字 | 现在的位置 |
+> |---|---|
+> | `CLAUDE_CODE_PROJECT_SPEC.md` | `docs/DESIGN.md` |
+> | `AGENT_SKILL_SYSTEM_DESIGN.md` | `docs/DESIGN.md` 附录（第三层） |
+> | `PROJECT_HANDOFF.md` | `docs/DECISIONS.md` |
+> | `MANUAL_INPUTS.md` / `PENDING_DELETIONS.md` | `docs/USER_ACTIONS.md` 第一/第二部分 |
+> | `EXPERT_DEPLOYMENT.md` / `VGGT_OMEGA_DEPLOYMENT.md` | `docs/OPERATIONS.md` 第二/第一部分 |
+> | `C1_CONFIDENCE_ANALYSIS.md` | `docs/FINDINGS.md` 附录 A |
+> | `SCALE_RECOVERY_ANALYSIS.md` | `docs/FINDINGS.md` 附录 B |
+> | `BASELINE_POINTCLOUD_ANALYSIS.md` | `docs/FINDINGS.md` 附录 C |
+>
+> SPEC 的**章节号未变** —— 代码与 schema 有 245 处引用，重新编号会全部打断。
+
+
+
 
 ## 0. 状态标记与阅读方法
 
@@ -1207,7 +1228,6 @@ README 第四层与固定原则、AGENT_SKILL_SYSTEM_DESIGN §4.6、三个 Task 
 10. 每次交付都注明：事实核验截止时间、已验证范围、仍未验证的许可/数据/模型风险。
 
 ---
-
 ### 19.8 管线定位纠偏：纯视觉优先，传感器真值只作标尺（2026-08-25）
 
 **[用户已确认]** 用户指出项目走偏了：

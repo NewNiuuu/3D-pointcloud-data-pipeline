@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/NewNiuuu/3D-pointcloud-data-pipeline/schemas/normalized_scene.schema.json",
   "title": "Normalized Scene Contract",
-  "description": "所有 dataset adapter 必须产出的统一场景契约。契约来源：CLAUDE_CODE_PROJECT_SPEC.md §12。SPEC 要求 'All adapters MUST emit this contract or a versioned successor.'",
+  "description": "所有 dataset adapter 必须产出的统一场景契约。契约来源：DESIGN.md §12。SPEC 要求 'All adapters MUST emit this contract or a versioned successor.'",
   "type": "object",
   "required": [
     "schema_version",

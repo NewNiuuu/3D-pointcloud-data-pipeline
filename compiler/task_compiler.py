@@ -1,7 +1,7 @@
 """任务编译：metadata snapshot + Task Spec → Canonical Task Record。
 
 契约来源：SPEC §11 的 L2-S6、§23.6（原 `task-prompt-compiler` 的职责）、§20.1。
-按 2026-08-25 的决定（`PROJECT_HANDOFF.md` §19.4），本模块实现为**普通代码**，
+按 2026-08-25 的决定（`DECISIONS.md` §19.4），本模块实现为**普通代码**，
 暂不封装为 Skill。
 
 ## 编译顺序不可调换

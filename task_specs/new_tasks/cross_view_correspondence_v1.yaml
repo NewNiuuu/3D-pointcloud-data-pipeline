@@ -1,5 +1,5 @@
 # Cross-view 3D Correspondence
-# 契约：CLAUDE_CODE_PROJECT_SPEC.md §24、§43、§45、PROJECT_HANDOFF §9.2 第 1 项
+# 契约：DESIGN.md §24、§43、§45、PROJECT_HANDOFF §9.2 第 1 项
 # 首批任务之一（2026-08-24 用户确认，选它而非 Metadata Verification，因 3D 必要性更强）
 
 task_id: cross_view_correspondence.object

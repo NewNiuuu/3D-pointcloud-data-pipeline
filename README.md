@@ -4,7 +4,7 @@
 > 想知道「具体改了什么」看 `docs/CHANGELOG.md`。
 >
 > 当前阶段：第一层完成，第二层提取链路建设中  
-> 对应主规格：`docs/CLAUDE_CODE_PROJECT_SPEC.md` v0.4.0  
+> 对应主规格：`docs/DESIGN.md` v0.4.0  
 > 最近更新：2026-08-25
 
 ## 🎯 这个项目要交付什么（2026-08-25 用户确立）
@@ -28,6 +28,22 @@
   **缺论证的任务不进 Release**，哪怕技术上能生成。当前上限**必须诚实写明**——
   写清做不到什么，正是「指方向」的一部分。
 
+## 📚 文档导航（2026-08-25 重构：14 份 → 8 份）
+
+| 文档 | 给谁看 | 装什么 |
+|---|---|---|
+| **README.md**（本文） | **你** | 进度追踪表、四层进度、项目全貌 |
+| `CLAUDE.md` | Agent（自动加载） | 项目规则。**规则 0 是设计哲学总纲** |
+| `docs/DESIGN.md` | Agent | 实施主规格。**Part 0 推导链**、铁律、四层、契约、门禁、**§52 任务价值论证**。附录含第三层 Skill 设计 |
+| `docs/DECISIONS.md` | 人 + Agent | 决策与依据的历史（原 PROJECT_HANDOFF），只追加 |
+| `docs/FINDINGS.md` | **你** | 调研结论摘要（结论先行）。附录 A/B/C 放完整数据与复现命令 |
+| `docs/OPERATIONS.md` | Agent | 环境、模型部署、复现命令、踩过的坑 |
+| `docs/USER_ACTIONS.md` | **你** | 只有两类：需要你提供的信息、需要你删的文件 |
+| `docs/CHANGELOG.md` | 人 + Agent | 每次改动的流水账，只追加 |
+
+> **想快速了解项目在干什么**：读 `DESIGN.md` 的 **Part 0**（设计哲学）与 **§52**（任务价值论证）。
+> 这两节是全项目的总纲和首要交付物。
+
 ## 📋 进度追踪表
 
 > **这是持续追踪用的主表。** 每次交付后更新状态，具体改动记录在 `docs/CHANGELOG.md`，不写进本表。
@@ -43,7 +59,7 @@
 ### 🟡 待办（现在就能做）
 
 > **2026-08-25 方向调整**：先完整搭通**第一、二、四层**主干（数据输入 → 提取/生成/处理 → 下游任务输出）。
-> **第三层降为润色层**，待主干可运行后再回来审视哪里值得用 Skill 提炼。详见 `PROJECT_HANDOFF.md` §19.4。
+> **第三层降为润色层**，待主干可运行后再回来审视哪里值得用 Skill 提炼。详见 `DECISIONS.md` §19.4。
 
 **主干（当前重点）**
 
@@ -87,7 +103,7 @@
 | R-36 | 任务分解与计划批判 | 商讨 | 上述能力就绪后 |
 | R-37 | **引入前视/侧视数据集**（原方案 B） | 商讨 | **这是解锁 R-30～R-36 的前置项**。候选 Mid-Air / FlyAwareV2 / UAVStereo，均需重做许可与可行性核验 |
 
-详见 `CLAUDE_CODE_PROJECT_SPEC.md` §46.5 与 Release E。
+详见 `DESIGN.md` §46.5 与 Release E。
 
 ### ⏸️ 暂缓（已决定推迟）
 
@@ -108,11 +124,11 @@
 | R-60 | 设计改动立即同步文档 | 用户 | `CLAUDE.md` 规则 1 + 文档职责映射表 |
 | R-61 | 占卡程序保持挂载 | 用户 | `CLAUDE.md` 规则 2 |
 | R-62 | 显卡监听守护程序 | 用户 | `scripts/gpu_guard.sh`，20 分钟一轮，实测自动拉起 |
-| R-63 | 人工输入登记簿 | 用户 | `docs/MANUAL_INPUTS.md` + `secrets/` 自屏蔽目录 |
+| R-63 | 人工输入登记簿 | 用户 | `docs/USER_ACTIONS.md` + `secrets/` 自屏蔽目录 |
 | R-64 | 变更日志 | 用户 | `docs/CHANGELOG.md`，六类标签，只追加不改写 |
-| R-65 | 待删除清单（Agent 不执行删除） | 用户 | `docs/PENDING_DELETIONS.md` |
+| R-65 | 待删除清单（Agent 不执行删除） | 用户 | `docs/USER_ACTIONS.md` |
 | R-66 | 同步到独立 GitHub 仓库 | 用户 | `NewNiuuu/3D-pointcloud-data-pipeline` |
-| R-67 | Blob 数据路径登记 | 用户 | `MANUAL_INPUTS.md` §3，D-001/D-002 含实测结构 |
+| R-67 | Blob 数据路径登记 | 用户 | `USER_ACTIONS.md` §3，D-001/D-002 含实测结构 |
 | R-68 | 调研结果另记简明文档 | 用户 | `docs/FINDINGS.md`，结论先行 |
 | R-69 | 项目专属 conda 环境 | 用户 | `nyp-3dpipe` + `nyp-moge`；`CLAUDE.md` 规则 3 |
 | R-70 | 修正 git 提交作者 | 用户 | 9 个提交改写，仓库级身份固化 |
@@ -129,9 +145,9 @@
 | R-10 | **冻结 L0/L1/L2 Metadata Schema** | 建议 | 4 个 schema（版本 0.1.0）+ `core/metadata.py` 跨层校验 + 39 项测试。新增 `surface` 实体类型（C2/C3 的锚点）；L2 强制 `derivation` |
 | R-79 | Task Spec（vertical slice 8） | 建议 | 4 个，覆盖 3 个任务族 |
 | R-80 | 专家模型许可核验与部署 | 用户 | 9 张专家卡；7 个已部署验证 |
-| R-81 | 现有点云语料分析 | 用户 | `docs/BASELINE_POINTCLOUD_ANALYSIS.md` |
+| R-81 | 现有点云语料分析 | 用户 | `docs/FINDINGS.md 附录 C` |
 | R-82 | VGGT-Ω 部署与输出契约 | 用户 | 代码就绪；输出契约实测确认 |
-| R-83 | 尺度转换关系调查 | 用户 | `docs/SCALE_RECOVERY_ANALYSIS.md`。**结论：数学成立但精度受重建稳定性限制** |
+| R-83 | 尺度转换关系调查 | 用户 | `docs/FINDINGS.md 附录 B`。**结论：数学成立但精度受重建稳定性限制** |
 | R-85 | **下游任务能力范围重定义（方案 A）** | 商讨 | 结合飞手痛点调研 + 数据实测，确定 C1 感知可信度 / C2 可降落性 / C3 米制地形 / C4 跨时相；移除全部导航类能力。已同步 17 个 SPEC 章节 + 4 份文档 + 3 个 Task Spec |
 | R-84 | 基线阈值定准 | 用户 | **结论是定不出来** —— 推翻了此前两条结论，详见 §C |
 
@@ -139,7 +155,7 @@
 
 ## 文档维护规则
 
-`CLAUDE_CODE_PROJECT_SPEC.md` 是 Agent 实施依据，本 README 是人类阅读入口。
+`DESIGN.md` 是 Agent 实施依据，本 README 是人类阅读入口。
 
 **README 的职责是追踪「还有什么要做、做到哪了」，不是记录「改了什么」。**
 具体改动一律记入 `docs/CHANGELOG.md`，不要往 README 里堆。
@@ -345,7 +361,7 @@ flowchart TD
 
 > ⏸️ **本层已于 2026-08-25 暂缓** —— 先搭通一、二、四层主干，Skill 作为润色层后置。
 > 其中的**校验功能**仍以普通代码实现在主干上，只是不封装为 Skill、不建统一门禁框架。
-> 详见 `PROJECT_HANDOFF.md` §19.4。
+> 详见 `DECISIONS.md` §19.4。
 
 ```mermaid
 flowchart LR
@@ -428,7 +444,7 @@ flowchart LR
 > （薄障碍 / 可飞行体积 / 净空 / 航迹 / TTC / Next-best-view）是在**尚未拿到数据**时的规划。
 > UAVScenes 实测为**近垂直下视航测飞行**（俯角中位 87.6°，对地约 33 m），
 > 相机看不到飞行方向前方，这些能力**无法产生有效监督**。
-> 详见 `CLAUDE_CODE_PROJECT_SPEC.md` §40 与 `PROJECT_HANDOFF.md` §19.5。
+> 详见 `DESIGN.md` §40 与 `DECISIONS.md` §19.5。
 
 最终任务标注采用统一格式，同时服务三类模型：
 
@@ -475,7 +491,7 @@ flowchart TD
 > 每个能力的完整价值论证（能力缺口 / 为何能训到 / **当前上限** / **好数据特征** / 衡量指标）见 SPEC §52。
 
 > ⚠ **配对不能只按航次名。** `_Evening` 内部有 4 倍亮度梯度（17:43 比日间还亮，18:04 才真暗），
-> 配对须同时约束 RTK 质心距离、亮度比、相机基线三项。详见 `docs/C1_CONFIDENCE_ANALYSIS.md` §7。
+> 配对须同时约束 RTK 质心距离、亮度比、相机基线三项。详见 `docs/FINDINGS.md 附录 A` §7。
 
 ### 能够生成的任务
 
@@ -616,7 +632,7 @@ tests/           141 项，全部通过
 | 服务器调度框架 | 不绑定框架，脚本 + 文件状态机 |
 | 质量阈值 | 沿用文档建议值，待真实数据后校准；首批样本 100% 人工复核 |
 
-细节与理由见 `PROJECT_HANDOFF.md` §19，机器可读形式见 `CLAUDE_CODE_PROJECT_SPEC.md` §36。
+细节与理由见 `DECISIONS.md` §19，机器可读形式见 `DESIGN.md` §36。
 
 ### 环境现实约束
 
@@ -624,7 +640,7 @@ tests/           141 项，全部通过
 - UAVScenes 已下载至 `data_raw/UAVScenes`（**HF 镜像开放，无需 token**）；其余 21 个候选未落盘。
 - HF 镜像仅含 **interval=5**（1/5 帧率）。降采样可能降低帧间重叠，影响 VGGT-Ω 重建质量，需实测；不足则改取 interval=1。
 - VGGT-Ω 尚未安装，其可获取性需在 Layer 2 开工前核验。
-- 需用户手动提供的凭证与材料统一登记在 `docs/MANUAL_INPUTS.md`（当前仅剩飞书导出一项待办）。
+- 需用户手动提供的凭证与材料统一登记在 `docs/USER_ACTIONS.md`（当前仅剩飞书导出一项待办）。
 
 ### 项目定位（2026-08-24 已澄清）
 
@@ -641,15 +657,15 @@ tests/           141 项，全部通过
 | 文件 | 阅读对象 | 用途 |
 |---|---|---|
 | `README.md` | 人类 | 项目方向、架构、数据集和当前状态 |
-| `CLAUDE_CODE_PROJECT_SPEC.md` | Claude Code / Agent | 服务器实现的主规格 |
-| `PROJECT_HANDOFF.md` | 人类与 Agent | 历史决策、调研依据和约束来源 |
-| `AGENT_SKILL_SYSTEM_DESIGN.md` | Agent / 开发者 | Skill 与质量系统的详细设计草案 |
-| `MANUAL_INPUTS.md` | 用户与 Agent | 需要用户手动提供的信息登记（token、凭证、许可申请、飞书导出）；只记位置不记真实值 |
+| `DESIGN.md` | Claude Code / Agent | 服务器实现的主规格 |
+| `DECISIONS.md` | 人类与 Agent | 历史决策、调研依据和约束来源 |
+| `DESIGN.md（附录：第三层）` | Agent / 开发者 | Skill 与质量系统的详细设计草案 |
+| `USER_ACTIONS.md` | 用户与 Agent | 需要用户手动提供的信息登记（token、凭证、许可申请、飞书导出）；只记位置不记真实值 |
 | `CHANGELOG.md` | 用户与 Agent | 每一次改动的流水账：需求、决策、实现、文档同步、事实修正 |
-| `PENDING_DELETIONS.md` | 用户 | 待删除内容与删除命令（Agent 不执行删除） |
-| `BASELINE_POINTCLOUD_ANALYSIS.md` | 人类与 Agent | blob 上现有 VGGT-Ω 点云语料的实测分析：格式、尺度、任务形态 |
-| `VGGT_OMEGA_DEPLOYMENT.md` | 人类与 Agent | VGGT-Ω 的可获取性、许可分层、环境部署与实测输出契约 |
-| `EXPERT_DEPLOYMENT.md` | 人类与 Agent | 专家模型的许可核验、部署状态与实测；逐模型详情见 `registry/experts/` |
+| `USER_ACTIONS.md` | 用户 | 待删除内容与删除命令（Agent 不执行删除） |
+| `FINDINGS.md 附录 C` | 人类与 Agent | blob 上现有 VGGT-Ω 点云语料的实测分析：格式、尺度、任务形态 |
+| `OPERATIONS.md` | 人类与 Agent | VGGT-Ω 的可获取性、许可分层、环境部署与实测输出契约 |
+| `OPERATIONS.md` | 人类与 Agent | 专家模型的许可核验、部署状态与实测；逐模型详情见 `registry/experts/` |
 | `FINDINGS.md` | **人类** | 调研发现的简明摘要：结论、影响、详情链接 |
-| `SCALE_RECOVERY_ANALYSIS.md` | 人类与 Agent | 相对深度如何锚定为米制、失效边界与基线阈值 |
-| `C1_CONFIDENCE_ANALYSIS.md` | 人类与 Agent | VGGT-Ω 置信度按语义类别的实测：水面失效信号、场景相对性 |
+| `FINDINGS.md 附录 B` | 人类与 Agent | 相对深度如何锚定为米制、失效边界与基线阈值 |
+| `FINDINGS.md 附录 A` | 人类与 Agent | VGGT-Ω 置信度按语义类别的实测：水面失效信号、场景相对性 |

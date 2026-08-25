@@ -1,6 +1,6 @@
 """UAVScenes dataset adapter：原始档案 → 归一化场景契约。
 
-契约来源：CLAUDE_CODE_PROJECT_SPEC.md §11（L2-S0）、§12（Normalized Scene Contract）。
+契约来源：DESIGN.md §11（L2-S0）、§12（Normalized Scene Contract）。
 
 ## 数据集事实（2026-08-24 实测，非文档转述）
 
@@ -22,7 +22,7 @@
 ## 场景切分
 
 一个 run 是完整飞行，帧数达数千，远超 VGGT-Ω 单次可处理量
-（PROJECT_HANDOFF §6.1：A100 上 100 帧约 13.4GB、500 帧约 43GB）。
+（DECISIONS §6.1：A100 上 100 帧约 13.4GB、500 帧约 43GB）。
 因此 adapter 将 run 切成定长窗口，每个窗口是一个 scene。窗口**不跨 run**，
 ``split_group_id`` 一律取地点，保证同地点全部数据落在同一 split。
 """
@@ -192,7 +192,7 @@ class UAVScenesAdapter:
         （materialize 模式下）。因此「遍历若干场景、挑一个合适的、break」这种
         再自然不过的写法，会把 break 之前的所有场景都落盘成孤儿目录。
 
-        这个坑踩过两次：`PENDING_DELETIONS` 的 X-001 与 X-004。
+        这个坑踩过两次：`USER_ACTIONS` 待删清单 的 X-001 与 X-004。
         第一次只在 CLI 里用 ``itertools.islice`` 打了补丁，没覆盖临时脚本里的
         裸循环 —— 所以第二次照样中招。**根治办法是提供一个无副作用的扫描接口。**
 
@@ -240,7 +240,7 @@ class UAVScenesAdapter:
 
         第一版实现遍历 ``build_scenes()`` 找匹配项 —— 但落盘发生在 ``_build_scene``
         内部，于是目标之前的每一个场景都被落了盘。这是同一个坑的第三次
-        （`PENDING_DELETIONS` X-001、X-004、X-005）。
+        （`USER_ACTIONS` 待删清单 X-001、X-004、X-005）。
         **教训：只要落盘是迭代的副作用，任何"遍历+挑选"的写法都会中招；
         必须提供不经过迭代的直接入口。**
         """

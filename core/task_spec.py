@@ -1,6 +1,6 @@
 """Task Spec 加载与校验。
 
-契约来源：CLAUDE_CODE_PROJECT_SPEC.md §24（Declarative Task Spec）、
+契约来源：DESIGN.md §24（Declarative Task Spec）、
 §43（Task Design Invariants）、铁律 5/6/8。
 
 Task Spec 是一道题的"配方"。本模块负责在**编译任何样本之前**就把不合规的

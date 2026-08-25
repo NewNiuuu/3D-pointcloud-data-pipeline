@@ -1,6 +1,6 @@
 """Artifact 信封：血缘、版本与不可变性。
 
-契约来源：CLAUDE_CODE_PROJECT_SPEC.md §30。
+契约来源：DESIGN.md §30。
 
 SPEC §30 要求每个 artifact 至少携带：artifact ID 与 schema 版本、父 artifact ID、
 dataset/scene/split/run ID、代码/模型/schema/task/prompt 版本、创建时间与运行配置、

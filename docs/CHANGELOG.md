@@ -21,7 +21,83 @@
 
 ---
 
+> ### 📁 2026-08-25 文档重构：旧文件名映射
+>
+> 本文档**只追加不改写**，因此下方历史条目中的文件名保持原样。对照表：
+>
+> | 历史条目中的名字 | 现在的位置 |
+> |---|---|
+> | `CLAUDE_CODE_PROJECT_SPEC.md` | `docs/DESIGN.md` |
+> | `AGENT_SKILL_SYSTEM_DESIGN.md` | `docs/DESIGN.md` 附录（第三层） |
+> | `PROJECT_HANDOFF.md` | `docs/DECISIONS.md` |
+> | `MANUAL_INPUTS.md` / `PENDING_DELETIONS.md` | `docs/USER_ACTIONS.md` 第一/第二部分 |
+> | `EXPERT_DEPLOYMENT.md` / `VGGT_OMEGA_DEPLOYMENT.md` | `docs/OPERATIONS.md` 第二/第一部分 |
+> | `C1_CONFIDENCE_ANALYSIS.md` | `docs/FINDINGS.md` 附录 A |
+> | `SCALE_RECOVERY_ANALYSIS.md` | `docs/FINDINGS.md` 附录 B |
+> | `BASELINE_POINTCLOUD_ANALYSIS.md` | `docs/FINDINGS.md` 附录 C |
+>
+> SPEC 的**章节号未变** —— 代码与 schema 有 245 处引用，重新编号会全部打断。
+
+
+
 ## 2026-08-25
+
+### `[需求]` `[文档]` 设计哲学入档 + 文档重构 14 份 → 8 份 — 用户 + Agent
+
+**用户确立的设计哲学**：这是 3D 点云理解项目，产出的数据必须真实体现三维特征，
+否则只是换壳的 2D 数据集；但数据集只提供 2D 图像/视频，
+**唯一路径是用 3D 专家模型从 2D 数据中提取三维特征**。
+**中间的 pipeline 设计、Skill，全都是为最后的下游任务服务的。**
+
+**做了什么（哲学部分）**：
+
+- `CLAUDE.md` 新增 **规则 0：项目哲学**（置于规则 1 之前，作为总纲），含推导方向、
+  反向证成规则、交付物优先级、纯视觉铁律；
+- `docs/DESIGN.md` 新增 **Part 0 设计哲学**（§0.1–§0.7）：
+  - §0.2 **推导链**——设计时从右往左（先定任务，倒推 metadata、模型、数据源），
+    执行时从左往右。**反过来做被明确禁止**，会产出「能生成但没价值」的任务；
+  - §0.3 **反向证成规则（MUST）**——每个提取阶段/metadata 字段/专家模型/Skill/门禁
+    必须能指名它服务的下游能力，附 13 行证成表，指不出来的标 `UNJUSTIFIED`；
+  - §0.4 **什么算体现了 3D 特征**——三条判据（锚定三维实体、单图答不出、
+    三维信息是因果性的）+ 假 3D 的三种典型形态；
+  - §0.5 一句话方法论：**让任务形态去适应误差的结构，而不是让误差去适应任务形态**；
+  - §0.6 四层的**目的/手段/前提/保障**从属关系；
+  - §0.7 按推导链的建议阅读顺序。
+
+**做了什么（重构部分）**：文档由 14 份并为 8 份。
+
+| 旧文件 | 新位置 |
+|---|---|
+| `CLAUDE_CODE_PROJECT_SPEC.md` | `DESIGN.md`（`git mv`，保留历史） |
+| `AGENT_SKILL_SYSTEM_DESIGN.md` | `DESIGN.md` 附录（第三层，已降为润色层） |
+| `PROJECT_HANDOFF.md` | `DECISIONS.md`（`git mv`） |
+| `MANUAL_INPUTS.md` + `PENDING_DELETIONS.md` | `USER_ACTIONS.md`（**用户要做的事合并到一处**） |
+| `EXPERT_DEPLOYMENT.md` + `VGGT_OMEGA_DEPLOYMENT.md` | `OPERATIONS.md`（**辅助开发类合并**） |
+| `C1_CONFIDENCE_ANALYSIS.md` / `SCALE_RECOVERY_ANALYSIS.md` / `BASELINE_POINTCLOUD_ANALYSIS.md` | `FINDINGS.md` 附录 A / B / C |
+
+**归类原则**（写进 `CLAUDE.md` 规则 1）：设计给 Agent 读｜历史给人和 Agent 读｜
+结论给人读｜工具给 Agent 用｜待办给用户。**新增文档前先问能不能并进现有的某一份。**
+
+**关键决定：不重新编号章节。** 代码、schema、task_spec、测试中共 **245 处**引用
+`§14.13`、`§27` 这类章节号，重新编号会全部打断。哲学的体现靠新增 Part 0 与
+§0.7 的推荐阅读顺序，不靠改号。
+
+**引用更新**：36 个文件的旧文件名批量替换。`CHANGELOG.md` 与 `DECISIONS.md`
+按「只追加不改写」原则**正文不动**，改为在开头加旧名 → 新位置映射表。
+
+**顺带修掉的陈旧内容**：Skill 附录里「净空、TTC 等真值由几何程序产生」
+与「Next-best-view 等任务复用编译接口」（导航类，已属 Release E backlog）；
+FINDINGS 里「低照度下靠 LiDAR 残差补原因归因」（违反铁律 14，改为纯视觉机制交叉指认）。
+
+**验证**：231 项测试全部通过，文件名替换未打断任何代码引用。
+
+**涉及文件**：`CLAUDE.md`、`README.md`（新增文档导航）、`docs/` 全部 6 份、
+36 个含引用的代码/schema/task_spec 文件
+
+**为什么**：文档数量本身是维护成本 —— 14 份文档里，用户真正要读的只有 2 份，
+其余是 Agent 参考或历史。合并后用户面向的是 README + FINDINGS + USER_ACTIONS，
+Agent 面向的是 DESIGN + OPERATIONS，历史是 DECISIONS + CHANGELOG。
+
 
 ### `[需求]` 交付物重心：任务类型的价值高于语料质量 — 用户
 

@@ -1,4 +1,4 @@
-# Low-Altitude 2D-to-3D Data Generation Pipeline
+# 设计主规格：低空 2D → 3D 数据生成管线
 
 > ## ⚠️ 两次重定义，按时间顺序读（2026-08-25，均 [用户已确认]）
 >
@@ -24,7 +24,7 @@
 > 与 **§52 任务价值论证与数据演进目标**（每能力五问，**缺论证的任务不进 Release**）。
 > → 写作纪律：**当前数据的质量上限 MUST 诚实写明**，写清做不到什么正是「指方向」的一部分。
 >
-> 决策依据见 `PROJECT_HANDOFF.md` §19.8、§19.9。
+> 决策依据见 `DECISIONS.md` §19.8、§19.9。
 >
 > ---
 >
@@ -55,7 +55,7 @@
 > **§14.6（薄障碍）与 §14.7（可飞行空间）予以保留但当前不适用** ——
 > 它们是针对前视/侧视数据的正确规则，待引入此类数据集后再启用。
 >
-> 决策依据见 `PROJECT_HANDOFF.md` §19.5。
+> 决策依据见 `DECISIONS.md` §19.5。
 
 
 ```yaml
@@ -67,6 +67,133 @@ fact_verification_cutoff: 2026-08-25
 execution_target: remote_server
 local_workspace_role: design_and_control_plane
 ```
+
+---
+
+# Part 0. 设计哲学：一切为下游任务服务
+
+> **本章是全文的总纲，2026-08-25 由用户确立。**
+> 后续所有章节都是这条哲学的展开；与本章冲突的表述以本章为准。
+
+## 0.1 项目身份带来的两难
+
+这是一个 **3D 点云理解**项目。因此产出的数据**必须真实体现三维特征** ——
+否则它只是换了个壳的 2D 数据集，没有存在的理由。
+
+但低空数据集**只提供 2D 图像或视频**（铁律 14）。
+
+于是唯一可行的路径是：**用 3D 专家模型从 2D 数据中提取三维特征。**
+
+这两句话之间的张力就是本项目要解决的全部问题。它同时决定了：
+为什么必须有 VGGT-Ω（要点云）、为什么要多个专家模型（要交叉验证）、
+为什么要置信度与门禁（提取会错）、为什么任务形态要精心挑选（错了还得能用）。
+
+## 0.2 推导链：设计时从右往左，执行时从左往右
+
+```text
+        执行方向（运行时）  →→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→→
+
+  数据源        3D 专家模型提取         结构化 3D metadata        任务编译           下游任务数据
+  (2D 图像/     VGGT-Ω / MoGe / DA3 /   点云·位姿·深度·置信度·    隐藏 target +      训练集 /
+   视频)        分割 / 光流 / 跟踪      法向·平面·语义·关联       evidence+checker   Benchmark
+
+        ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←  推导方向（设计时）
+```
+
+**设计时 MUST 从右端出发**：先确定要什么下游任务 → 倒推它需要哪些 3D metadata →
+倒推哪些专家模型能提供 → 最后才是数据源要满足什么条件。
+
+**反过来做是被明确拒绝的工作方式**：先看有什么数据、有什么模型、能提取什么，
+再想能出什么题 —— 那会得到一堆「能生成但没价值」的任务。
+
+## 0.3 反向证成规则（MUST）
+
+> **每一个提取阶段、metadata 字段、专家模型、Skill 与门禁，
+> MUST 能指名它服务的下游任务能力。**
+> 指不出来的，MUST 标注 `UNJUSTIFIED`，并在下次交付中删除或补上论证。
+
+正向读是执行链，反向读是证成链：
+
+| 上游组件 | 它为什么存在 | 服务的下游能力 |
+|---|---|---|
+| VGGT-Ω 点云 | 点云是 3D-GRPO 的直接消费对象，也是所有 3D 锚点的载体 | 全部 |
+| 相机位姿与内参 | situated 任务需要观察者视角；GSD 需要内参 | situated VQA、C3 |
+| `depth_conf` | 任务要回答「这里可不可信」 | **C1** |
+| 多估计器（MoGe / DA3） | **分歧是失效标注的来源** —— 不是为了投票求真值（§14.13） | **C1** |
+| 光流 / 前后向环路误差 | 自洽违反是纯视觉的失效证据（§40.5 机制 1） | **C1** |
+| 扰动重提取 | 几何脆弱度标注 | **C1、C4** |
+| 法向与局部平面拟合 | 坡度、共面性 —— **角度无尺度，是 C2 的核心量** | **C2、C3-a** |
+| 语义分割 | 「平坦 ≠ 可降落」必须联合语义才能判 | **C2** |
+| 跨视角关联与实例融合 | 同一实体在不同视角的指认 | grounding、cross-view |
+| 尺度锚探测（EXIF/GPS） | 决定能不能出米制题（§40.5 机制 5） | **C3-b** |
+| 泄漏防护（§41、`task_adapters/base.py`） | 答案出现在输入里，题就白出了 | 全部 |
+| 确定性 checker | **判不了分的题不该被生成**（§27 G3） | 全部 |
+| Split group | 同场景样本跨 split 会虚高指标 | 全部 |
+
+**本表 MUST 随设计变更同步更新。** 新增任何上游组件前，先在此登记它服务谁。
+
+## 0.4 什么才算「体现了 3D 特征」
+
+三条判据，**缺一不可**：
+
+1. **答案锚定在三维实体上**（§41）：target MUST 映射到点索引、点掩码、OBB、平面、
+   区域或相机位姿。只给一个字符串 ID **不算** —— 点云模型无从消费。
+2. **单张 2D 图像回答不了**（铁律 5、§29）：若外观捷径能给出**正确**答案，它就不是 3D 任务。
+   注意判据是「捷径给出正确答案」，不是「捷径比较难」。
+3. **三维信息是因果性的**：改变三维结构会改变答案，
+   而只改变外观（光照、色彩、曝光）**不应**改变答案。**这正是 C4 的直接检验。**
+
+**假 3D 的典型形态（MUST NOT 生成）：**
+
+- 把 2D 识别题搬到点云上（「这是什么颜色的建筑」）；
+- 答案能从 metadata 字段名或字段值直接读出（泄漏，铁律 6）；
+- 数值确实来自 3D，但与外观强相关、模型可用外观回归
+  （如树种已知时问「树有多高」—— 看着像 3D，实为先验查表）。
+
+## 0.5 提取一定不准，怎么办
+
+这是本设计最核心的工程现实。应对方式**不是**换更好的传感器（那违反铁律 14），
+而是 §40.5 的五条机制。一句话概括：
+
+> **让任务形态去适应误差的结构，而不是让误差去适应任务形态。**
+
+- 深度误差以**尺度与低频偏置**为主 → 用序数、角度、比值这些缩放下不变的目标（机制 2）；
+- 提取器会失效 → **把失效本身做成标签**（机制 4）；
+- 不知道哪些样本可信 → 一致性**做筛子不做真值**（机制 3）；
+- 分不清测量与观点 → 只让可复算的测量定义答案（机制 1）；
+- 尺度不总是可得 → 分档，够不着就静默降级（机制 5）。
+
+## 0.6 四层架构的从属关系
+
+四层不是并列的，是**目的与手段**的关系：
+
+| 层 | 地位 | 说明 |
+|---|---|---|
+| **第四层 下游任务** | **目的** | 其余三层存在的唯一理由 |
+| **第二层 提取与生成** | **手段** | 提供第四层**点名要**的 3D metadata，不多做 |
+| **第一层 数据源** | **前提** | 满足第二层可提取的最低要求（§40.5 机制 5 的 T0–T4 分档） |
+| **第三层 Agent/Skill/门禁** | **保障** | 保证前三者的产出可信、可复现、可判定 |
+
+**第三层当前降为「润色层」**（`DECISIONS.md` §19.4）——
+保障机制应当在被保障的东西成型之后再固化。不是不重要，是次序问题。
+详细设计完整保留在本文附录。
+
+## 0.7 建议阅读顺序
+
+代码、schema 与 task spec 中有 **245 处引用现有章节号**，
+因此本次文档重构**不重新编号**。但推荐按推导链的顺序阅读：
+
+| 步骤 | 问题 | 章节 |
+|---|---|---|
+| 1 | **要产出什么** | §1.1 交付物优先级 → §40 能力目标 → **§52 任务价值论证** → §44–§48 任务族 → §51 发布顺序 |
+| 2 | **任务需要什么** | §41 任务记录契约 → §19 任务样本契约 → §24 Task Spec → §42 监督等级 → §27/§50 门禁 |
+| 3 | **从哪里提取** | §13 几何重建 → §14 专家模型系统 → §15 提升融合 → §16 metadata 分层 |
+| 4 | **数据源要满足什么** | §7 数据集卡 → §8 准入门禁 → §40.5 机制 5（T0–T4 分档） |
+| 5 | **怎么保障** | §21–§33（第三层，当前降级）+ 附录 |
+
+**只读一节的话读 §52** —— 它是本项目的首要交付物（§1.1）。
+
+---
 
 ## 0. Agent Directive
 
@@ -83,9 +210,9 @@ Normative terms:
 Before modifying implementation:
 
 1. Read this file completely.
-2. Read `PROJECT_HANDOFF.md` for provenance and historical context.
+2. Read `DECISIONS.md` for provenance and historical context.
 3. Treat this file as authoritative for system organization.
-4. If this file conflicts with a user-confirmed rule in `PROJECT_HANDOFF.md`, stop and report the conflict.
+4. If this file conflicts with a user-confirmed rule in `DECISIONS.md`, stop and report the conflict.
 5. Do not silently resolve `UNRESOLVED` items.
 
 ## 1. System Objective
@@ -824,7 +951,7 @@ Calibration MAY use isotonic regression, Platt scaling, conformal calibration, o
 且在低照度档位上，**MUST NOT 假定置信度仍能区分失效原因**（§14.5 的原因码
 在该档位需要**其他纯视觉机制**交叉指认 —— 估计器分歧、重投影/环路误差、
 扰动敏感度、语义先验 —— 不能只靠 conf 推）。
-详见 `docs/C1_CONFIDENCE_ANALYSIS.md`。
+详见 `docs/FINDINGS.md 附录 A`。
 
 **标定数据从哪来（铁律 14）**：标定**本身**需要误差真值，因此 MUST 在一个
 T4 数据集（带 LiDAR/RTK）上离线完成**一次**，产出的是**映射函数与其不确定性**；
@@ -1640,8 +1767,8 @@ Transitions MUST require the preceding gate report. A state label alone is not s
 
 ```text
 3D-data-Gen/
-├── CLAUDE_CODE_PROJECT_SPEC.md
-├── PROJECT_HANDOFF.md
+├── DESIGN.md
+├── DECISIONS.md
 ├── docs/
 │   ├── architecture.md
 │   ├── quality-policy.md
@@ -1822,7 +1949,7 @@ final_primary_deliverable:
 ```
 
 Resolution provenance: the four blocking items were decided by the user on 2026-08-24; see
-`PROJECT_HANDOFF.md` §19. The remaining entries are working defaults, not user-confirmed
+`DECISIONS.md` §19. The remaining entries are working defaults, not user-confirmed
 invariants, and MAY be revised with a recorded reason.
 
 ## 37. Evidence Boundaries
@@ -1970,7 +2097,7 @@ Qwen still MUST NOT consume raw point clouds in the current architecture. Point-
   **原因码 SHOULD 由不同机制交叉指认**（如：语义提示水面 + 分歧大 + 扰动敏感），
   单一机制不足以定原因。
 
-**已实测支撑**（`docs/C1_CONFIDENCE_ANALYSIS.md`，全程未用 LiDAR）：
+**已实测支撑**（`docs/FINDINGS.md 附录 A`，全程未用 LiDAR）：
 水面 `depth_conf` 与陆面分布基本分离（AUC 0.865）；扰动（亮度降至 0.25×）后
 判别力坍缩到 AUC 0.670。**后者正是扰动法的一次完整演示。**
 
@@ -2034,7 +2161,7 @@ C3-a **MUST** 在所有数据集上可产；C3-b 由 `metric_task_eligible` 资�
 配对**若要使用**，MUST 同时约束三项：绝对坐标质心距离（航线一致）、
 图像亮度比（退化真实存在）、相机基线（两侧都有足够视差）。
 **仅按航次名配对是错的** —— `_Evening` 内部有 4 倍亮度梯度，17:43 段比日间还亮，
-只有 18:00 后才真暗（实测详见 `docs/C1_CONFIDENCE_ANALYSIS.md` §7）。
+只有 18:00 后才真暗（实测详见 `docs/FINDINGS.md 附录 A` §7）。
 
 ### 40.4 保留但当前不适用
 
@@ -2281,7 +2408,7 @@ These tasks SHOULD include hard cases where similar 2D appearance corresponds to
 > 在近垂直下视的航测数据上无法产生有效监督，故**不在当前实施范围**。
 >
 > **但它们仍是项目目标的一部分**（2026-08-25 用户补充：模型需要能力多样性），
-> 已移入 §46.5 作为后续待办。原设计完整保留在 `PROJECT_HANDOFF.md` §18.2。
+> 已移入 §46.5 作为后续待办。原设计完整保留在 `DECISIONS.md` §18.2。
 
 ### 46.1 C1 感知可信度与失效归因
 
@@ -2391,7 +2518,7 @@ These tasks SHOULD include hard cases where similar 2D appearance corresponds to
 | Next-best-view、检查视角规划 | 航测航线预先规划，无主动视角决策 | 具备主动飞行决策的数据 |
 | 任务分解与计划批判 | 步骤绑定 waypoint 与航迹约束 | 上述能力就绪后 |
 
-**实施路径**：引入前视/侧视数据集（候选见 `PROJECT_HANDOFF.md` §19.5 的方案 B：
+**实施路径**：引入前视/侧视数据集（候选见 `DECISIONS.md` §19.5 的方案 B：
 Mid-Air / FlyAwareV2 / UAVStereo，均需重新做许可与可行性核验）。
 届时 §14.6（薄障碍证据规则）与 §14.7（可飞行空间推导链）**无需重写即可启用** ——
 这正是当初保留而非删除它们的原因。
@@ -2573,7 +2700,7 @@ Dataset-level validation MUST include 2D-only, metadata-only, 2D+metadata, point
 > **2026-08-25 移除**：原 Release B 的薄障碍中心线与净空、occupancy/free/unknown、
 > 可飞行体积分割、航迹可行性与瓶颈定位、动态轨迹/TTC/扫掠体风险、Next-best-view 与检查覆盖；
 > 原 Release C 的任务分解与计划批判（其步骤绑定 waypoint 与航迹约束）。
-> 详见 §40.1。这些设计保留在 `PROJECT_HANDOFF.md` §18.2，**现登记为上面的 Release E**。
+> 详见 §40.1。这些设计保留在 `DECISIONS.md` §18.2，**现登记为上面的 Release E**。
 
 ---
 
@@ -2680,7 +2807,7 @@ Dataset-level validation MUST include 2D-only, metadata-only, 2D+metadata, point
 
 - ✅ C3-a（序数/比值）成立且对深度误差稳健；
 - ⚠️ C3-b（绝对米制）依赖尺度锚。实测**不能**从 VGGT-Ω 自身恢复米制
-  （锚定后 CV 仍 19.5%，见 `SCALE_RECOVERY_ANALYSIS.md`）；
+  （锚定后 CV 仍 19.5%，见 `FINDINGS.md 附录 B`）；
 - ❌ 米制精度**至今没有任何验证过的数字** —— 需 Release D。
 
 **好数据的特征**：
@@ -2734,3 +2861,613 @@ Dataset-level validation MUST include 2D-only, metadata-only, 2D+metadata, point
    在深度不准的现实下，先把无尺度的任务做扎实，比追求米制精度更划算。
 3. **测「模型在干净输入上多准」是不够的，要测「它的自我评估在退化下是否还成立」。**
    这一维度现有基准普遍缺失，而它恰恰对应真实作业中最危险的失效模式。
+
+---
+
+# 附录：第三层 Agent / Skill 系统详细设计
+
+> **第三层已于 2026-08-25 降级为「润色层」**（见 `DECISIONS.md` §19.4）：
+> 先把一、二、四层主干搭通，Skill 是主干可运行后再提炼的东西。
+> 本附录保留完整设计，届时直接启用。功能当前以普通函数实现，不封装 Skill。
+>
+> 2026-08-25 由 DESIGN.md（附录：第三层） 并入，正文未改动（仅修正若干陈旧能力表述）。
+
+
+> ⏸️ **本层已于 2026-08-25 暂缓（[用户已确认]）。**
+>
+> 用户决定先完整搭通第一、二、四层的主干（数据输入 → 提取/生成/处理 → 下游任务输出），
+> **第三层的 Skill 封装与统一门禁框架推迟**，待主干可运行后再回来审视哪里值得用 Skill 提炼。
+>
+> **但本文档的规则仍然有效** —— 其中定义的校验项、修复策略、泄漏检查等**功能**
+> 会以普通代码形式实现在主干上，只是暂不封装为 Skill、暂不建立 Orchestrator 与 G1–G6 框架。
+>
+> 详见 `DECISIONS.md` §19.4 的功能/封装双重归属对照表。
+
+> 状态：设计草案，不代表已经开始实现或运行服务器任务  
+> 记录日期：2026-08-23（Asia/Shanghai）  
+> 上游约束：以 `DECISIONS.md` 中标记为“用户已确认”的内容为准
+
+## 1. 本阶段目标
+
+当前阶段只完成本地控制面的总体设计、规则沉淀和接口定义，不下载大型数据集、不运行 VGGT-Ω、不调用 Qwen 批量生成数据，也不部署服务器 Pipeline。
+
+最终执行环境在服务器。本地项目负责维护：
+
+- Pipeline 的阶段定义和状态机；
+- 3D metadata 与任务样本规范；
+- Task Spec、Prompt Template 和输出 Schema；
+- Agent 使用的 Skills；
+- 校验器、质量门禁和监控指标定义；
+- 版本、来源、运行配置和发布清单。
+
+## 2. 不变的项目约束
+
+以下规则继承自交接文档，不得由 Agent 或 Skill 擅自更改：
+
+1. 点云主路径固定为 VGGT-Ω。
+2. Qwen 接收 2D 图像/视频与结构化 3D metadata，不直接读取原始点云。
+3. 任务必须真实依赖 3D 信息，不能退化为普通 2D QA 或 metadata 字段抄写。
+4. 距离、角度、遮挡、相交、坡度、共面性等可确定计算的真值优先由几何程序产生。<br/>（2026-08-25：原列「净空、TTC」，属导航类能力，已移入 Release E backlog。）
+5. LLM 不是几何真值的唯一来源，也不能同时自由生成 metadata、问题、答案并自行证明正确。
+6. metric 与 relative scale 必须明确区分；不允许把伪深度或相对重建结果冒充米制真值。
+7. 每项自动生成结果必须记录来源、模型版本、输入帧、坐标系、单位、置信度和运行版本。
+8. 数据切分必须按场景、地域或完整轨迹进行，禁止逐帧随机切分造成泄漏。
+9. 首版优先实现最小 L0/L1/L2 schema，不提前铺开完整 L3 导航和风险能力。
+10. 正式放量前必须先跑通小样本闭环，并建立 2D-only、metadata-only、2D+metadata 对照。
+
+## 3. 总体设计原则
+
+### 3.1 Skill 与 Prompt 的职责不同
+
+Skill 用于规定 Agent 如何决策、读取哪些规范、调用哪些校验器、在什么条件下继续或停止。Prompt Template 只是具体模型调用的一个版本化输入模板。
+
+因此首版不为每种题型创建一个独立 Skill，而采用：
+
+```text
+少量流程型 Skill
+    └── 读取可版本化 Task Spec
+            └── 选择对应 Prompt Template
+                    └── 绑定输入字段、隐藏字段、输出 Schema 和 Checker
+```
+
+新增任务通常只增加 Task Spec、模板和 checker，不应复制整个 Skill。
+
+### 3.2 程序先于语言模型
+
+能通过数据、几何或规则确定的内容，应先产生结构化事实和 target，再让模型完成语言表达、组合推理或候选方案生成。
+
+推荐把任务分成三类：
+
+| 类型 | 典型任务 | 真值来源 | 模型职责 |
+|---|---|---|---|
+| Program-first | Grounding、metric VQA、cross-view correspondence | 几何程序、匹配器、原生标注 | 问题自然化、指代理解、结构化回答 |
+| Hybrid | Caption、Dialogue、Metadata Verification | 程序生成 claims/冲突，再由模型表达 | 组织语言、跨轮推理、解释 |
+| Model-first constrained | *（当前无首批任务使用）* | 模型先生成候选，程序和规则验证 | 规划、解释、修复候选<br/>**2026-08-25：原列 Task Decomposition 与 Next-best-view，二者当前无数据支撑，已降级为后续目标（SPEC §46.5）** |
+
+### 3.3 生成与评估解耦
+
+- 确定性校验器优先于 LLM Judge。
+- LLM Judge 只评估语义自然度、描述覆盖和难以程序化的歧义，不裁决几何真值。
+- 尽量避免同一模型、同一上下文同时负责生成与唯一语义验收。
+- 所有自动修复都必须保留原输出、错误列表、修复次数和最终状态。
+
+## 4. Agent 系统结构
+
+建议首版由一个 Orchestrator Agent 管理八类流程 Skill。
+
+```text
+Pipeline Orchestrator Agent
+├── dataset-registry-manager
+├── expert-registry-manager
+├── scene-ingestion-validator
+├── metadata-quality-gate
+├── task-spec-designer
+├── task-prompt-compiler
+├── task-sample-auditor
+└── dataset-quality-monitor
+```
+
+### 4.1 Pipeline Orchestrator Agent
+
+职责：
+
+- 根据场景状态选择下一阶段；
+- 只向 Skill 提供当前阶段所需的最小上下文；
+- 管理 artifact、版本、失败原因、重试次数和隔离队列；
+- 执行质量门禁，不允许失败样本静默进入下一阶段；
+- 汇总服务器运行结果，但不修改任务真值；
+- 在超过重试上限、发现尺度冲突或关键来源缺失时停止并请求人工处理。
+
+Orchestrator 不应：
+
+- 自由改写 schema；
+- 为了提高通过率而降低质量阈值；
+- 自动把 relative 场景升级为 metric；
+- 跳过失败阶段直接发布数据；
+- 用 LLM 猜测缺失的相机、尺度或几何真值。
+
+### 4.2 `dataset-registry-manager`
+
+适用阶段：数据集调研、去重、验证和首批选择。
+
+职责：
+
+- 维护 Dataset Card、别名、版本和飞书只读快照；
+- 核验官方来源、许可、文件清单、尺度来源和小样本验证状态；
+- 阻止未完成许可或样本验证的数据集进入全量接入。
+
+### 4.3 `expert-registry-manager`
+
+适用阶段：专家模型被加入服务器配置之前。
+
+职责：
+
+- 分别记录代码许可、权重许可、API 条款和衍生数据限制；
+- 记录输入输出、坐标约定、预处理变换、checkpoint hash 和运行环境；
+- 区分研究推荐等级与实际部署授权；
+- 维护专家运行频率、fallback 和服务器 profile；
+- 未完成 UAV 小样本验证的模型不得标记为 production-ready。
+
+当前语义链路候选为 Grounded-SAM-2、SAM 2.1、SEA-RAFT、OneFormer、CABiNet、Florence-2 和 DINOv2。几何专家优先顺序修订为 MoGe-3、DSINE、DA3-1.1；DA3-Streaming 仅用于长视频，CoTracker3/Trace Anything 用于轨迹和动态研究。WorldMirror 只允许推理/评估，不能生成 Qwen 训练 metadata。这些只是调研建议，不代表已获许可或已验证。
+
+`expert-registry-manager` 还必须：
+
+- 分别标记 `training_allowed`、`evaluation_only`、`quality_control_only`；
+- 审计顶层仓库及传递依赖/权重许可；
+- 记录模型谱系和共享偏差组，禁止把 MoGe/MetricAnything 或 VGGT/DA3 等相关模型当作完全独立投票；
+- 阻止 WorldMirror 输出进入训练样本；
+- 保存每个模型的图像变换、坐标约定、SE(3)/Sim(3)/scale-shift 对齐方式和 alignment version。
+
+### 4.4 `scene-ingestion-validator`
+
+适用阶段：数据集 adapter 输出后、VGGT-Ω 运行前。
+
+检查：
+
+- 图像/视频是否可读；
+- 帧、时间戳、内参、外参和原生标注是否能对齐；
+- 场景切分是否存在跨 split 泄漏；
+- 数据来源、许可状态和 dataset version 是否记录；
+- `depth_source`、`metric_scale` 与尺度锚点是否一致；
+- 输入是否满足重建最小视角覆盖和重叠要求。
+
+输出：`ingestion_report.json`，状态只能为 `pass`、`warn`、`quarantine` 或 `reject`。
+
+### 4.5 `metadata-quality-gate`
+
+适用阶段：VGGT-Ω、专家模型和 2D-to-3D fusion 完成后。
+
+检查：
+
+- scene/object/relation schema；
+- 坐标系、单位和尺度状态；
+- 相机、深度、点云和对象投影的一致性；
+- 稳定 ID 的唯一性与引用完整性；
+- OBB、centroid、centerline、track 的数值合法性；
+- 置信度、support views、provenance 是否完整；
+- 动态 ghost、薄结构缺失、低覆盖、异常深度和跨视角冲突；
+- 派生字段能否从记录的上游字段重新计算。
+- detector、mask、track、depth 和关联置信度是否被错误压成单一分数；
+- 动态概率是否基于扣除相机自运动后的 residual flow；
+- `sky`、`water`、`reflection_or_transparency`、`low_depth_confidence`、`reprojection_inconsistent`、`dynamic_geometry` 等 reason mask 是否分别保存；
+- ~~薄障碍是否保存概率、骨架、边界置信度、多帧支持和 3D 拟合残差~~ —— **当前不适用**（SPEC §40.1）。
+  等价的现行检查：**LiDAR 与视觉深度的残差及失效原因码是否可重算、是否分别保存**。
+- metric、externally anchored、relative、affine-invariant、pseudo depth 是否被严格区分；
+- metric 测试是否在 Sim(3) 对齐前报告原始尺度误差；
+- 多专家结果是否先计算残差并校准，而不是直接平均或投票；
+- WorldMirror conditioned/refiner 输出是否被错误当作独立验证。
+
+输出：`metadata_validation_report.json` 和可供下游使用的 `metadata_snapshot_id`。失败版本不可原地覆盖，应产生新版本。
+
+### 4.6 `task-spec-designer`
+
+适用阶段：场景metadata通过门禁后、具体任务样本编译前。
+
+职责：
+
+- 将点云、相机、对象、关系、轨迹、occupancy和质量字段映射为Task Spec；
+- 为每个任务定义能力标签、低空标签、监督等级、可见字段、隐藏target、3D目标锚点和checker；
+- 保证任务具有3D必要性，避免仅靠单张2D图像或字段查找解决；
+- 保证低空专项任务使用**下视几何、对地高度、深度可信度、可降落性属性、米制地形量或跨航次重复观测**；
+  （2026-08-25：原文为「薄障碍、可飞行空间、航迹、动态风险或主动视角」，已按 SPEC §40 重定义。）
+- 维护原生点云、Qwen 2D+metadata、多模态3D三类adapter；
+- 输出能力覆盖矩阵，防止不同题型只是在重复测试同一能力。
+
+### 4.7 `task-prompt-compiler`
+
+适用阶段：把已通过 metadata 门禁的场景编译为模型调用包。
+
+职责：
+
+- 读取 Task Spec；
+- 从场景 metadata 中裁剪任务局部子图；
+- 应用 `metadata_input_fields` 与 `hidden_target_fields`；
+- 调用 derivation program 得到 target 和 evidence；
+- 选择相应 Prompt Template；
+- 写入允许的输出类型、JSON Schema、拒答条件和精度要求；
+- 生成正常提示词及结构化修复提示词；
+- 在模型调用前进行目标泄漏检查。
+
+输出为 `prompt_bundle.json`，而不是直接得到最终数据样本。
+
+### 4.8 `task-sample-auditor`
+
+适用阶段：模型返回后、样本进入数据集前。
+
+检查：
+
+- 输出是否满足 JSON Schema；
+- ID、数值、单位和枚举是否合法；
+- target 是否与 checker 重算结果一致；
+- evidence 是否足以支持答案；
+- 问题是否可解、是否存在多个同等答案；
+- 输入中是否泄露 target 或派生答案；
+- 是否存在纯 2D shortcut 或纯字段查找 shortcut；
+- Caption claims 是否忠实、Dialogue 状态是否跨轮一致；
+- 输出是否包含未被 metadata 支持的对象或关系；
+- 任务难度、文本质量和表达多样性是否达到要求。
+
+修复策略：
+
+1. Schema 或格式错误：允许一次结构化 repair。
+2. 表达问题但 target 正确：允许一次 constrained rewrite。
+3. 几何真值、证据、尺度或歧义错误：禁止语言修复，返回上游重新编译或隔离。
+4. 达到重试上限仍失败：`quarantine`，不得继续循环调用模型。
+
+### 4.9 `dataset-quality-monitor`
+
+适用阶段：批次生成期间和数据集候选发布前。
+
+职责：
+
+- 汇总每阶段通过率、失败类型和重试率；
+- 监控类别、场景、任务、难度、尺度来源和真实/仿真的分布；
+- 检查重复、近重复、模板坍缩和问答表达单一；
+- 监控 checker agreement、目标泄漏率、歧义率和无依据内容率；
+- 比较不同版本、模型和数据集的质量漂移；
+- 执行 2D-only、metadata-only、2D+metadata、metadata shuffle 等依赖性测试；
+- 生成 `quality_dashboard.json` 与 `release_manifest.json`。
+
+监控 Skill 只能报告和阻断，不得自动改变 release threshold。
+
+## 5. Task Spec 规范
+
+每一种任务或子任务应有一个版本化 Task Spec。建议字段：
+
+```yaml
+task_id: 3d_vqa.metric.minimum_distance
+version: 0.1.0
+task_family: 3d_vqa
+generation_mode: program_first
+
+required_scene_capabilities:
+  scale_status: metric
+  geometry: [observer_position, centerline]
+
+visual_input_policy:
+  input_type: multi_view_image
+  min_views: 2
+  selection: support_and_context
+
+metadata_input_fields:
+  - observer.position
+  - entities.object_id
+  - entities.category
+  - entities.geometry.centerline
+
+hidden_target_fields:
+  - derived.minimum_distance
+  - target.object_id
+
+derivation_program: minimum_point_to_polyline_distance
+checker: check_minimum_distance_answer
+
+prompt_template: 3d_vqa/metric_v1
+output_schema: schemas/3d_vqa_metric_answer.schema.json
+
+leakage_rules:
+  forbidden_input_fields:
+    - entities.distance_to_observer
+    - derived.minimum_distance
+
+quality_requirements:
+  minimum_geometry_confidence: 0.80
+  maximum_answer_count: 1
+  numeric_tolerance_m: 0.10
+```
+
+Task Spec 必须明确：
+
+- 任务为什么依赖 3D；
+- 需要哪些场景能力；
+- 哪些字段对模型可见；
+- 哪些字段是隐藏真值；
+- target 如何计算；
+- 输出如何验证；
+- 什么情况下拒绝生成该任务。
+
+## 6. Prompt Bundle 规范
+
+每次模型调用保存完整、可重放的 Prompt Bundle：
+
+```json
+{
+  "prompt_bundle_id": "pb_...",
+  "task_spec_id": "3d_vqa.metric.minimum_distance@0.1.0",
+  "scene_id": "scene_000018",
+  "metadata_snapshot_id": "meta_...",
+  "model": {
+    "provider": "pending",
+    "name": "pending",
+    "version": "pending",
+    "parameters": {}
+  },
+  "visual_inputs": [],
+  "system_prompt": "...",
+  "task_prompt": "...",
+  "metadata_context": {},
+  "output_schema": {},
+  "hidden_target_ref": "target_...",
+  "checker": "check_minimum_distance_answer",
+  "retry_policy": {
+    "max_format_repairs": 1,
+    "max_semantic_rewrites": 1
+  }
+}
+```
+
+提示词至少包含以下约束：
+
+1. 任务身份与坐标系定义；
+2. 可使用的视觉输入和 metadata 范围；
+3. 不得虚构未提供的对象、关系、单位或尺度；
+4. 证据不足、对象歧义或尺度不满足时的拒答格式；
+5. 严格输出 Schema；
+6. 数值精度、单位和 ID 格式；
+7. 禁止输出隐藏推理过程，只输出要求的答案与可审计 evidence reference；
+8. 不允许把 prompt 中的示例 ID 或示例数值复制为当前答案。
+
+### 6.1 不同任务的提示词重点
+
+#### 3D Grounding
+
+- 只返回允许的 object/part/region/route/track ID；
+- 候选集不得包含 target 标记；
+- 关系表达必须相对指定坐标系或 observer pose；
+- 多解时返回歧义状态，不强猜单一对象。
+
+#### 3D VQA
+
+- metric 题必须满足尺度要求；
+- situated 题必须绑定观察者位姿和方向约定；
+- 数值答案必须带单位和容差；
+- target 应由程序计算，模型不负责创造真值。
+
+#### 3D Caption
+
+- 先提供程序生成的 claim set，再由模型组织语言；
+- 最终同时保存自然语言和结构化 claims；
+- 禁止加入 claim set 与视觉证据均不支持的事实。
+
+#### 3D Task Decomposition
+
+- 每一步绑定 action、target ID、goal region、约束、前置条件和完成条件；
+- 模型生成候选计划后必须通过几何与规则验证；
+- 不满足约束时允许返回不可行，而不是强行补全计划。
+
+#### 3D Dialogue
+
+- 显式传递 dialogue state、已绑定实体、当前 observer pose 和 metadata version；
+- metadata 更新后必须能够修正旧答案；
+- 指代不唯一时主动澄清，不得静默换绑对象。
+
+#### 新增任务
+
+Cross-view Correspondence、Metadata Verification、Viewpoint Transformation、可信度判定（C1）、可降落性（C2）等任务均应复用同一编译接口，通过 Task Spec 定义自己的输入掩码、真值程序和 checker。
+
+## 7. 阶段门禁
+
+建议使用硬门禁与软评分组合，不允许一个总分掩盖关键错误。
+
+| Gate | 阶段 | 关键硬失败条件 |
+|---|---|---|
+| G0 | Dataset / expert registry and ingestion | 文件不可读、场景切分泄漏、数据或模型许可阻断、关键来源缺失 |
+| G1 | Geometry and expert inference | 坐标系不明、尺度声称冲突、重建失败、预处理坐标变换缺失 |
+| G2 | Metadata | ID 引用断裂、关键 provenance 缺失、数值非法、置信度或无效原因被错误合并 |
+| G3 | Task design / compile | 3D必要性或低空特性不成立、target不可重算、输入泄漏target、任务不可解 |
+| G4 | Model output | Schema 无法修复、引用不存在的实体 |
+| G5 | Sample audit | checker 不一致、证据不足、多解未标记、3D 依赖不成立 |
+| G6 | Dataset release | 泄漏率超阈值、重复率超阈值、对照实验不成立 |
+
+统一状态：
+
+- `pass`：可以进入下一阶段；
+- `warn`：可以进入下一阶段，但必须记录警告并计入监控；
+- `quarantine`：隔离，等待人工或上游重新处理；
+- `reject`：当前配置下不可用。
+
+## 8. 质量监控与评估
+
+### 8.1 单样本质量维度
+
+- schema validity；
+- provenance completeness；
+- geometry confidence；
+- answer determinism；
+- evidence sufficiency；
+- target leakage；
+- ambiguity；
+- 3D necessity；
+- visual/metadata consistency；
+- language quality；
+- uncertainty calibration。
+
+硬失败项不参与加权平均。只有通过硬门禁的样本才可计算软质量分。
+
+### 8.2 批次与数据集指标
+
+至少监控：
+
+- 每个 Gate 的通过率、隔离率和拒绝率；
+- 模型输出 Schema 一次通过率；
+- format repair 与 semantic rewrite 比例；
+- deterministic checker agreement；
+- unsupported claim rate；
+- target leakage rate；
+- ambiguous sample rate；
+- exact/near duplicate rate；
+- 类别、任务、难度、场景、尺度来源、真实/仿真分布；
+- 相邻版本的数据分布漂移；
+- 不同专家模型、数据集和重建配置的失败模式。
+- mask AP、Boundary F-score 和薄结构连通率；
+- HOTA、IDF1、ID switch 和跨视角关联质量；
+- forward-backward flow error 与 ego-compensated dynamic IoU；
+- 3D lifting point purity/completeness、重投影 IoU 和跨视角 3D IoU；
+- 深度分歧、法向角误差和尺度漂移；
+- ECE、Brier、NLL、AUSE、risk-coverage/AURC；
+- 延迟、峰值显存、FPS、J/frame、临时磁盘、metadata bytes/frame 和视频分钟成本。
+- perception、metric geometry、**metric terrain**、viewpoint、cross-view、visibility、
+  **perception reliability**、**failure attribution**、**landability**、**temporal change**、
+  **illumination robustness**、uncertainty、language 能力覆盖率；
+  （2026-08-25：移除 thin structure、motion、navigation、safety、active perception、planning，见 SPEC §49。）
+- pointcloud-native、Qwen 2D+metadata和multimodal-3D adapter的可用样本数；
+- 强监督、程序派生、过滤伪标签、弱标签和语言生成的比例。
+
+### 8.3 验证模型是否使用 3D Metadata
+
+正式评测至少包含：
+
+1. `2D-only`；
+2. `metadata-only`；
+3. `2D+metadata`；
+4. metadata field masking；
+5. metadata shuffle；
+6. spatial counterfactual；
+7. 遮挡或弱视觉证据子集。
+
+只有当 `2D+metadata` 在真正依赖三维的任务上稳定优于 `2D-only`，且 metadata shuffle/counterfactual 会导致符合预期的性能变化，才能声称模型有效使用了 metadata。
+
+## 9. Artifact 与可追溯性
+
+服务器 Pipeline 的阶段产物建议统一为：
+
+```text
+run_manifest.json
+scene_manifest.json
+ingestion_report.json
+geometry_manifest.json
+metadata_snapshot.json
+metadata_validation_report.json
+task_spec.yaml
+prompt_bundle.json
+raw_model_output.json
+validated_sample.json
+quality_event.jsonl
+quality_dashboard.json
+release_manifest.json
+```
+
+每个 artifact 至少包含：
+
+- artifact ID 与版本；
+- parent artifact IDs；
+- scene/dataset/split ID；
+- 代码、模型、schema、task spec 和 prompt 版本；
+- 创建时间与运行配置；
+- 输入摘要或校验和；
+- 状态、错误代码、警告和重试记录。
+
+任何修复、重跑或重生成均创建新 artifact，不静默覆盖历史版本。
+
+## 10. 本地控制面与服务器执行面
+
+### 本地控制面
+
+- 编写和审查 Skills；
+- 维护 schema、Task Spec、Prompt Template、checker contract；
+- 维护质量阈值和发布规则；
+- 使用合成小样本做单元测试；
+- 生成服务器可读取的版本化配置包。
+
+### 服务器执行面
+
+- 数据下载与缓存；
+- VGGT-Ω 和专家模型推理；
+- 2D-to-3D lifting/fusion；
+- Qwen 或其他配置模型调用；
+- 大规模 deterministic validation；
+- 指标聚合、隔离队列和候选发布。
+
+本地设计不得硬编码服务器路径、GPU 型号、模型密钥或单一调度系统。这些应由 server profile 注入。
+
+## 11. 建议的后续目录结构
+
+这里只记录建议，当前尚未创建：
+
+```text
+3D-data-Gen/
+├── docs/
+│   ├── architecture.md
+│   └── quality-policy.md
+├── agents/
+│   └── pipeline-orchestrator/
+├── skills/
+│   ├── dataset-registry-manager/
+│   ├── expert-registry-manager/
+│   ├── scene-ingestion-validator/
+│   ├── metadata-quality-gate/
+│   ├── task-spec-designer/
+│   ├── task-prompt-compiler/
+│   ├── task-sample-auditor/
+│   └── dataset-quality-monitor/
+├── task_specs/
+│   ├── grounding/
+│   ├── vqa/
+│   ├── caption/
+│   ├── task_decomposition/
+│   ├── dialogue/
+│   └── new_tasks/
+├── task_adapters/
+│   ├── qwen_2d_metadata/
+│   ├── pointcloud_native/
+│   └── multimodal_3d/
+├── prompt_templates/
+├── schemas/
+├── checkers/
+├── configs/
+└── tests/
+```
+
+## 12. 实现顺序建议
+
+在用户确认实施后，按以下顺序推进：
+
+1. 冻结 artifact ID、状态枚举和最小 schema。
+2. 建立 dataset/expert registry，完成许可、checkpoint 和 I/O contract 门禁。
+3. 定义 3D Grounding、metric/situated 3D VQA、Cross-view Correspondence 三个 Task Spec。
+4. 实现 `task-prompt-compiler`，先只支持离线 prompt bundle 编译，不调用模型。
+5. 实现确定性 checker 与 target leakage 检查。
+6. 实现 `task-sample-auditor` 和有限修复策略。
+7. 实现 metadata 与 ingestion 门禁，包括 residual flow 和 invalid-reason checks。
+8. 最后实现 Orchestrator 状态机和 dataset-level monitor。
+9. 用合成 scene package 完成本地测试，再迁移到服务器 UAV 小样本：至少 40–60 个短片段和 8–12 个长片段；如需完成完整语义专家评估，再扩展到 100–300 段。
+
+该顺序优先验证“任务能否被正确编译和检查”，避免在几何模型尚未跑通前写出大量不可验证的提示词。
+
+## 13. 用户决策状态
+
+2026-08-24 已确定（详见 `DECISIONS.md` §19，机器可读形式见 SPEC §36）：
+
+1. **首批真实数据集：UAVScenes 单个**；
+2. **首版强制 metric**，relative / affine-invariant / pseudo 场景不具备任务资格；
+3. **首批任务：3D Grounding（对象级）+ metric/situated 3D VQA + Cross-view Correspondence**；
+4. **Qwen 部署暂缓** —— 首批只编译 prompt bundle 不调用模型，`task-prompt-compiler` 的离线编译能力因此成为当前最优先的 Skill；
+5. **LLM Judge 首版不引入**，只用确定性 checker；
+6. 质量阈值沿用文档建议值待校准；**首批样本 100% 人工复核**；
+7. **不绑定调度框架**，使用脚本 + 文件状态机。
+
+其中第 1–4 项为 **[用户已确认]**，不得擅自推翻；第 5–7 项为工作默认值，可带记录理由修订。
+
+项目定位已于 2026-08-24 澄清（详见 `DECISIONS.md` §19.2）：本 Pipeline 产出**点云 + 下游任务标注**一对交付物；`3D-GRPO` 是下游训练框架（SFT + GRPO 训练点云理解模型），当前与数据生成解耦。
+
+对 §4.6 `task-spec-designer` 的直接影响：其维护的三类 adapter 中，**`pointcloud_native` 已有明确消费方**，优先级不低于 `qwen_2d_metadata`。Task Spec 必须保证 target 可映射到点云几何锚点，而不是只服务 Qwen 的文本接口。

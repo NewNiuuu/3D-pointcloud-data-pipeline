@@ -1,6 +1,6 @@
 """确定性几何函数：任务真值的唯一来源。
 
-契约来源：CLAUDE_CODE_PROJECT_SPEC.md §14.15（Deterministic Geometry Boundary）、
+契约来源：DESIGN.md §14.15（Deterministic Geometry Boundary）、
 铁律 7（可确定计算的值必须由程序产生并校验，不得只采信 LLM）。
 
 SPEC §14.15 明确划界 —— 模型**可以**预测深度、法向、mask、track、可见性、

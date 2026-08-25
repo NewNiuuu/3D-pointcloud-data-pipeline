@@ -1,6 +1,6 @@
 """任务编译器的测试。
 
-用**合成 scene package** 验证 —— 这是 `AGENT_SKILL_SYSTEM_DESIGN.md` §12
+用**合成 scene package** 验证 —— 这是 `DESIGN.md（附录：第三层）` §12
 明确规定的路径（"用合成 scene package 完成本地测试，再迁移到服务器"），
 也使这套测试不依赖 VGGT-Ω 权重。
 

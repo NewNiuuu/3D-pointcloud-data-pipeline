@@ -1,5 +1,5 @@
 # UAVScenes License Review
-# Contract: CLAUDE_CODE_PROJECT_SPEC.md §9 / Skill: dataset-registry-manager (§23.1)
+# Contract: DESIGN.md §9 / Skill: dataset-registry-manager (§23.1)
 # Gate: G0
 # 核验日期：2026-08-24
 
@@ -64,7 +64,7 @@ user_decision:
   decided_by: user
   decision: accept_nc_sa_academic_use
   rationale: 项目定位为学术研究；NC-SA 约束可接受。
-  recorded_in: PROJECT_HANDOFF.md §19.3
+  recorded_in: DECISIONS.md §19.3
 
 open_items:
   - id: L-001

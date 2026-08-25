@@ -1,6 +1,6 @@
 """确定性 Checker：把模型输出与隐藏 target 比对判分。
 
-契约来源：CLAUDE_CODE_PROJECT_SPEC.md §19（Task Sample Contract 的 ``checker``
+契约来源：DESIGN.md §19（Task Sample Contract 的 ``checker``
 字段）、§23.7（task-sample-auditor）、§43.3（可验证性）。
 
 ## 为什么 checker 先于题目存在

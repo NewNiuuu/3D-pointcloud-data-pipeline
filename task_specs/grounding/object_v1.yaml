@@ -1,5 +1,5 @@
 # 3D Grounding —— 对象级
-# 契约：CLAUDE_CODE_PROJECT_SPEC.md §24、§26.1、§43、§47.1
+# 契约：DESIGN.md §24、§26.1、§43、§47.1
 # 首批任务之一（2026-08-24 用户确认）
 
 task_id: 3d_grounding.object
@@ -92,7 +92,7 @@ eligibility:
     - candidate_count_at_least: 3
     - target_visible_in_at_least_n_views: 1
     - all_candidates_have_valid_obb: true
-    - camera_baseline_m_at_least: 2.0    # 必要不充分条件。见 SCALE_RECOVERY_ANALYSIS.md
+    - camera_baseline_m_at_least: 2.0    # 必要不充分条件。见 FINDINGS.md 附录 B
                                          # 「重大修正」：该阈值无实证支持，仅用于排除
                                          # 明显退化的轨迹，不构成尺度可信的依据
     - domain_calibrated: true            # 唯一充分条件：尺度须经独立真值验证。

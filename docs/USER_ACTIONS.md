@@ -1,4 +1,13 @@
-# 人工输入登记簿
+# 需要你处理的事项
+
+> **这份文档只有两类内容：需要你提供的信息、需要你删除的文件。**
+> 项目进度看 `../README.md`。
+> 建立于 2026-08-25（由 USER_ACTIONS.md 与 USER_ACTIONS.md 合并）。
+
+---
+
+# 第一部分：需要你提供的信息
+
 
 > 用途：登记项目推进过程中需要用户手动提供的信息（token、密钥、账号、链接、许可申请结果等）
 > 阅读对象：用户与 Agent 共同维护
@@ -70,7 +79,7 @@ export HF_TOKEN=实际的值
 
 ### M-004 说明
 
-**来源**：`PROJECT_HANDOFF.md` §3.2 / §10.1 与 SPEC §5 记载，前一位 Agent 读取过用户提供的飞书文档，从中提取项目已有数据集清单（FloodNet、Open3DVQA、TDBench、LADI-v2、AVI-Math、AirCopBench、SpatialSky、UrbanVideo-Bench、MM-UAVBench、MME-RealWorld、Geo3DVQA），并以此定义「22 个新增候选」= 不在该清单中的数据集。文档要求下一轮调研前重新读取最新内容（**只读，不得修改飞书**）。
+**来源**：`DECISIONS.md` §3.2 / §10.1 与 SPEC §5 记载，前一位 Agent 读取过用户提供的飞书文档，从中提取项目已有数据集清单（FloodNet、Open3DVQA、TDBench、LADI-v2、AVI-Math、AirCopBench、SpatialSky、UrbanVideo-Bench、MM-UAVBench、MME-RealWorld、Geo3DVQA），并以此定义「22 个新增候选」= 不在该清单中的数据集。文档要求下一轮调研前重新读取最新内容（**只读，不得修改飞书**）。
 
 **唯一用途**：下一轮数据集调研的去重基准。
 
@@ -124,7 +133,7 @@ bash /home/aiscuser/nyp/blob_manager.sh         # 交互式界面
 
 这两个路径下的点云对应 `data/` 中的数据集（FloodNet、LADI、AirCopBench、UrbanVideoBench、AVIMath、RefDrone、AAVG、DVG），**不是** UAVScenes。
 
-用户口径（详见 `PROJECT_HANDOFF.md` §19.2）：
+用户口径（详见 `DECISIONS.md` §19.2）：
 
 - 它们是本 Pipeline "2D → 点云"这一步在那批数据集上的**最终点云结果**；
 - 同时**也可以**作为生成下游任务标注的中间产物，**是否纳入取决于后续任务设计**，当前不预先锁定；
@@ -176,5 +185,118 @@ dataset_id: <数据集 id>
 ## 6. 与其他文档的边界
 
 - **本文件只管「需要用户手动提供的外部信息」。**
-- 需要用户做**技术决策**的未决项（首批数据集、是否强制 metric scale、首批任务、Qwen 部署方式、质量阈值等）**不放这里**，它们在 `CLAUDE_CODE_PROJECT_SPEC.md` §36 `Unresolved Decisions` 和 `README.md` 的「实施边界」中维护。
+- 需要用户做**技术决策**的未决项（首批数据集、是否强制 metric scale、首批任务、Qwen 部署方式、质量阈值等）**不放这里**，它们在 `DESIGN.md` §36 `Unresolved Decisions` 和 `README.md` 的「实施边界」中维护。
 - 一条信息若既涉及决策又涉及凭证（例如 M-003：先决定用 API 还是本地权重，再决定要不要 key），在两处各记一条并互相引用。
+
+---
+
+# 第二部分：待删除清单（Agent 不执行删除）
+
+
+> 用途：记录项目推进过程中产生的、应当删除但**不由 Agent 执行删除**的内容。
+> 由用户定期查看并手动执行。
+> 建立日期：2026-08-24
+
+## 规则
+
+**Agent 不执行删除操作。** 发现应删除的内容时，追加一条到下方表格，写清路径、体积、为什么该删、删除命令，然后继续推进项目，不因此停下来请示。
+
+用户确认删除后，把该条移入「已删除」区并标注日期 —— 保留记录而不是抹掉，便于事后核对误删。
+
+**例外**：以下情况仍必须**当场请示**，不得只记在这里 —— 因为它们不是"清理垃圾"，而是有可能丢失真实工作成果：
+
+- 删除对象包含未提交的代码、文档或实验结果；
+- 删除对象是用户提供的原始数据；
+- 删除范围可能超出预期（通配符、递归删父目录）；
+- 无法确定该对象是否还有其他引用。
+
+## 待删除
+
+| # | 路径 | 体积 | 原因 | 记录时间 |
+|---|---|---:|---|---|
+| X-007 | Blob 远程：`output/liyan/nyp_0825/.git/objects/pack/tmp_pack_sBdTzc` | **6.80 GiB** | **被误备份的 git 废弃临时 pack**。2026-08-24 16:35 一次中断的 git 操作留下的临时文件，首轮全量备份时被一并上传。git 自己迟早会清掉本地那份，blob 上这份则会永久滞留。**当前 token 无 `d` 权限，Agent 删不掉**（同 M-009）。教训已记入 FINDINGS：备份排除项该把 `.git/objects/pack/tmp_pack_*` 纳进去 | 2026-08-25 |
+| X-004 | Blob 远程：`output/liyan/_perm_probe/`<br>`output/liyan/_perm_probe2/`<br>`output/liyan/_perm_probe3/`<br>`output/liyan/_srctest/`<br>`output/liyan/_rntest_0825/`<br>`output/liyan/_ovtest/`<br>`output/liyan/_ovtest2/`<br>`output/liyan/.perm_probe` | < 1 KB | **备份改造与覆盖语义验证时的探针残留**。用于验证 SAS token 的写入/服务端复制/删除权限、azcopy 目录改名与通配上传的真实语义，以及 `--overwrite ifSourceNewer` 的实际行为。结论已记入 CHANGELOG 与 FINDINGS，目录本身无用。**当前 token 权限 `racwl` 缺 `d`，Agent 删不掉**，需用带删除权限的 token 清理（同 M-009） | 2026-08-25 |
+| X-005 | Blob 远程：`output/liyan/nyp_0823/` | 0 B | **空目录**。8-23 配置的备份从未成功上传过一个字节（token 过期，86 轮全 403），只留下一个空目录名。已由 `nyp_0825` 取代 | 2026-08-25 |
+| X-006 | `/home/aiscuser/.blob_backup.sh`<br>`/home/aiscuser/.blob_backup.log`<br>`/home/aiscuser/.blob_backup.log.failed_0823-0825.bak` | ~30 KB | **blob_manager 旧备份机制的残留**。备份已迁到 `nyp/scripts/blob_backup.sh`，`.blob_backup.json` 的路径已清空。`.log.failed_*.bak` 是那 86 轮失败日志的存档，**确认过失败原因后再删**（保留一阵有助于复盘）。注意 `.blob_backup.pid` 仍在用（见脚本里的 COMPAT_PID_FILE），**不要删** | 2026-08-25 |
+| X-001 | `/home/aiscuser/nyp/scenes/uavscenes_AMtown01_0003` | ~88 MB | **孤儿场景目录**。`build_scenes.py` 的 `--limit` 曾在 `yield` 之后才 `break`，而帧文件在 `yield` 之前就已解出，导致多解一个场景且未写 `scene_manifest.json`。该 bug 已用 `itertools.islice` 修复（见 CHANGELOG `[修正]`），此目录是修复前的残留，无清单、不被任何流程引用 | 2026-08-24 |
+| X-002 | `/home/aiscuser/nyp/scenes/uavscenes_AMtown01_0000`<br>`/home/aiscuser/nyp/scenes/uavscenes_AMtown01_0001`<br>`/home/aiscuser/nyp/scenes/uavscenes_AMtown01_0002` | ~257 MB | **标注文件约半数错误**。adapter v0.1.0 用后缀匹配定位标注，而两个标注档案各含 `*_id`（类别 ID）与 `*_color`（RGB 可视化）两份**同名**平行数据，遍历无序 `set` 导致随机命中其一。已在 v0.2.0 改为显式路径并加 5 项测试锁死。这三个场景的 `labels_cam/` 与 `labels_lidar/` 内容不可信，**清单本身正确但标注文件需重新生成** | 2026-08-24 |
+| X-003 | `/home/aiscuser/nyp/.venv` | ~60 MB | **废弃的 venv**。最初用 `python -m venv --system-site-packages` 建的项目环境，用户随后要求改用 conda。已被 `nyp-3dpipe` conda 环境完全取代，无任何脚本或文档引用它 | 2026-08-24 |
+
+**X-002 删除后的重建命令**（删除后需重跑，否则 `scenes/` 为空）：
+
+```bash
+cd /home/aiscuser/nyp/3D-data-pipeline
+PYTHONNOUSERSITE=1 /home/aiscuser/miniconda3/envs/nyp-3dpipe/bin/python \
+    scripts/build_scenes.py --run interval5_AMtown01 --limit 3
+```
+
+### 删除命令
+
+```bash
+# X-004 / X-005 Blob 远程残留
+# 前提：先把 ~/.blob_config.json 里的 token 换成带 d 权限的（sp=racwdl），否则必然 403。
+# 可先验证权限：能删掉探针文件说明权限到位。
+TOKEN=$(grep -oP '"sas_token"\s*:\s*"\K[^"]+' ~/.blob_config.json)
+R="https://yifanyang.blob.core.windows.net/yifanyang/output/liyan"
+for d in _perm_probe _perm_probe2 _perm_probe3 _srctest _rntest_0825 _ovtest _ovtest2 nyp_0823; do
+    azcopy rm --recursive "${R}/${d}?${TOKEN}"
+done
+azcopy rm "${R}/.perm_probe?${TOKEN}"
+
+# X-007 被误备份的 git 废弃临时 pack（6.8 GiB）
+azcopy rm "${R}/nyp_0825/.git/objects/pack/tmp_pack_sBdTzc?${TOKEN}"
+
+# X-006 旧备份机制残留（.blob_backup.pid 仍在用，不在此列）
+rm -f /home/aiscuser/.blob_backup.sh /home/aiscuser/.blob_backup.log
+# 失败日志存档：确认过 8-23 那次失败原因后再删
+rm -f /home/aiscuser/.blob_backup.log.failed_0823-0825.bak
+```
+
+```bash
+# X-001 孤儿场景目录
+# 建议先确认它确实没有清单（有清单说明是正常场景，不该删）：
+ls /home/aiscuser/nyp/scenes/uavscenes_AMtown01_0003/scene_manifest.json 2>/dev/null \
+  && echo "⚠️ 有清单，不要删！" \
+  || rm -rf /home/aiscuser/nyp/scenes/uavscenes_AMtown01_0003
+```
+
+```bash
+# X-003 废弃 venv：先确认 conda 环境可用，再删
+PYTHONNOUSERSITE=1 /home/aiscuser/miniconda3/envs/nyp-3dpipe/bin/python -c "import torch, vggt_omega; print('conda 环境正常')" \
+  && rm -rf /home/aiscuser/nyp/.venv
+```
+
+```bash
+# X-004 孤儿场景（12 个）：先确认确实无清单，再删
+cd /home/aiscuser/nyp/scenes
+for d in uavscenes_HKisland01_00{01,02,03,04,05,06,07,08,09,10,11,12}; do
+  [ -f "$d/scene_manifest.json" ] && echo "⚠️ $d 有清单，跳过" || rm -rf "$d"
+done
+```
+
+一次性清理全部待删除项（**执行前请先逐条核对上表**）：
+
+```bash
+rm -rf /home/aiscuser/nyp/scenes/uavscenes_AMtown01_0003 \
+       /home/aiscuser/nyp/scenes/uavscenes_AMtown01_0000 \
+       /home/aiscuser/nyp/scenes/uavscenes_AMtown01_0001 \
+       /home/aiscuser/nyp/scenes/uavscenes_AMtown01_0002 \
+       /home/aiscuser/nyp/.venv
+# 删完 X-002 后记得按上面的重建命令重跑 3 个场景
+```
+
+## 已删除
+
+| # | 路径 | 删除时间 | 备注 |
+|---|---|---|---|
+| X-001 | `scenes/uavscenes_AMtown01_0003` | 2026-08-25 | 用户手动执行，带前置检查 |
+| X-002 | `scenes/uavscenes_AMtown01_0000/0001/0002` | 2026-08-25 | 坏标注残留。**删除前曾实际造成故障** —— C1 实验想用它做对照组时，`_id`/`_color` 混淆导致通道数不一致直接报错，只得另建 AMtown02_0000 |
+| X-003 | `/home/aiscuser/nyp/.venv` | 2026-08-25 | 废弃 venv，已被 conda `nyp-3dpipe` 取代 |
+
+## 条目模板
+
+```
+| X-0XX | `<绝对路径>` | <体积> | <为什么该删；如果是 bug 残留，指明是哪个 bug、是否已修> | <日期> |
+```
+
+配套在「删除命令」区给出可直接粘贴的命令，**并尽量带一个防误删的前置检查**（如上例先验证清单不存在）。

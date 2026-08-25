@@ -1,5 +1,5 @@
 # Expert Card: Grounding DINO Base
-# Contract: CLAUDE_CODE_PROJECT_SPEC.md §23.2 (expert-registry-manager)
+# Contract: DESIGN.md §23.2 (expert-registry-manager)
 # 核验日期: 2026-08-24
 
 expert_id: grounding_dino_base

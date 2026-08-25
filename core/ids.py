@@ -1,6 +1,6 @@
 """稳定 ID 命名空间。
 
-契约来源：CLAUDE_CODE_PROJECT_SPEC.md §15。
+契约来源：DESIGN.md §15。
 
 ID 是语言输出与点云实体之间的唯一接口：模型输出 ID，系统据此映射回
 点云实例 mask、OBB、中心线或轨迹。因此 ID 格式必须冻结，且在一个

@@ -1,6 +1,6 @@
 """错误码。
 
-契约来源：CLAUDE_CODE_PROJECT_SPEC.md §30（artifact 必须记录 error codes）、
+契约来源：DESIGN.md §30（artifact 必须记录 error codes）、
 §27（门禁硬失败）、§35（实施停止条件）。
 
 编码规则 ``<GATE>-<CATEGORY><NN>``：

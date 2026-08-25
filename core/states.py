@@ -1,6 +1,6 @@
 """Pipeline 状态机与门禁状态。
 
-契约来源：CLAUDE_CODE_PROJECT_SPEC.md §27（门禁）、§31（Orchestrator 状态机）。
+契约来源：DESIGN.md §27（门禁）、§31（Orchestrator 状态机）。
 
 两条不可放宽的规则：
 

@@ -1,5 +1,5 @@
 # UAVScenes Dataset Card
-# Contract: CLAUDE_CODE_PROJECT_SPEC.md §7
+# Contract: DESIGN.md §7
 # 事实核验：2026-08-24（GitHub README/LICENSE、HF API、MARS-LVIG 官网、arXiv）
 
 dataset_id: uavscenes

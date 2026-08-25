@@ -86,7 +86,7 @@
         "camera_baseline_m": {
           "type": ["number", "null"],
           "minimum": 0,
-          "description": "相机轨迹的最大位移。尺度可信度的必要条件之一 —— 但**不充分**，且 MUST NOT 用对齐残差替代此判据（见 docs/SCALE_RECOVERY_ANALYSIS.md 「重大修正」：2 帧对齐残差恒为 0 而尺度误差可达 460%）。"
+          "description": "相机轨迹的最大位移。尺度可信度的必要条件之一 —— 但**不充分**，且 MUST NOT 用对齐残差替代此判据（见 docs/FINDINGS.md 附录 B 「重大修正」：2 帧对齐残差恒为 0 而尺度误差可达 460%）。"
         },
         "alignment_residual_m": {
           "type": ["number", "null"],
