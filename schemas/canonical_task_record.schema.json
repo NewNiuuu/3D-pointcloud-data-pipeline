@@ -77,6 +77,14 @@
     "evidence": { "$ref": "#/$defs/evidence" },
     "checker": { "$ref": "#/$defs/checker" },
 
+    "structurally_visible_target_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "description": "**结构性必需可见**的目标实体 ID。\n\ngrounding 这类「从候选中指认」的任务，正确答案的 ID 必然出现在可见候选列表里 —— 那是任务的定义，不是泄漏。编译器在此登记，adapter 据此豁免这些 ID 的文本扫描。\n\n真正的防线是 Task Spec 的 `leakage_rules.forbidden_input_fields`（`is_target` / `rank` / `distance_to_observer`）与候选顺序的确定性打乱。",
+      "$comment": "本字段本身不是答案 —— 它只说明「这些 ID 允许出现在输入里」，不说明哪一个是对的。"
+    },
+
     "ambiguity": {
       "type": "object",
       "additionalProperties": false,

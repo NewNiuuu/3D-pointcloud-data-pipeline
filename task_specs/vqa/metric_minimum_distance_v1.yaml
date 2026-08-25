@@ -124,5 +124,6 @@ adapters:
 
 capability_tags:
   - metric_geometry
-  - thin_structure
-  - flight_safety
+  - metric_terrain
+  # 2026-08-25：移除 thin_structure 与 flight_safety —— 已按 SPEC §40.1 移出能力范围。
+  # 这两个标签是我改文档时漏掉的，由 canonical_task_record schema 的枚举校验抓出。

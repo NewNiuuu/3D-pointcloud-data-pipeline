@@ -118,6 +118,16 @@ _MIN_STRING_ATOM_LEN = 8
 #: 多远」。它与 ``task_spec_id`` 天然同名，若纳入原子会把每一条记录都误判为泄漏。
 _NON_ANSWER_KEYS = frozenset({"target_type", "unit", "answer_mode", "reason"})
 
+#: 后缀命中即视为**结构性索引**而非答案，不参与扫描。
+#:
+#: ``nearest_segment_index`` 是"答案落在折线第几段"的辅助定位，不是答案本身。
+#: 把它当原子会让 ``0`` 这个值匹配到任何含 0 的坐标或 ID。
+_NON_ANSWER_KEY_SUFFIXES = ("_index", "_count", "_id_hint")
+
+#: 数值原子的最小字符长度。``0`` / ``1`` / ``12`` 这类小数值毫无特异性，
+#: 用它们判泄漏只会命中坐标分量与 ID 中的数字。
+_MIN_NUMERIC_ATOM_CHARS = 3
+
 
 def _target_atoms(hidden_target: dict[str, Any]) -> set[str]:
     """把 hidden_target 拆成可在文本中检索的原子串。
@@ -125,10 +135,12 @@ def _target_atoms(hidden_target: dict[str, Any]) -> set[str]:
     纳入原子的三类值：
 
     - **实体 ID**（``<obj_042>``）—— 永远特异，出现即泄漏；
-    - **数值** —— 规范化后比对，米制答案出现在可见字段即泄漏；
+    - **足够特异的数值** —— 规范化后至少 :data:`_MIN_NUMERIC_ATOM_CHARS` 位；
+      米制答案出现在可见字段即泄漏，但 ``0`` / ``1`` 这类不算；
     - **足够长的字符串**（≥ :data:`_MIN_STRING_ATOM_LEN`）—— 特异短语。
 
-    **排除** :data:`_NON_ANSWER_KEYS` 下的值 —— 它们描述答案的类型而非答案本身。
+    **排除**两类键下的值：:data:`_NON_ANSWER_KEYS`（描述答案的类型而非答案本身），
+    以及后缀命中 :data:`_NON_ANSWER_KEY_SUFFIXES` 的结构性索引。
 
     **不纳入** ``evidence`` 的 ``used_fields`` / ``used_entities``：
     对 program-first 任务，这些字段与候选实体**本来就该对模型可见**
@@ -137,13 +149,16 @@ def _target_atoms(hidden_target: dict[str, Any]) -> set[str]:
     """
     atoms: set[str] = set()
     for path, v in _walk(hidden_target):
-        if path.split(".")[-1].split("[")[0] in _NON_ANSWER_KEYS:
+        key = path.split(".")[-1].split("[")[0]
+        if key in _NON_ANSWER_KEYS or key.endswith(_NON_ANSWER_KEY_SUFFIXES):
             continue
         if isinstance(v, str):
             if _ID_RE.fullmatch(v) or len(v) >= _MIN_STRING_ATOM_LEN:
                 atoms.add(v)
         elif isinstance(v, (int, float)) and not isinstance(v, bool):
-            atoms.add(f"{float(v):.6g}")
+            text = f"{float(v):.6g}"
+            if len(text.lstrip("-")) >= _MIN_NUMERIC_ATOM_CHARS:
+                atoms.add(text)
     return atoms
 
 
@@ -228,9 +243,14 @@ class TaskAdapter(ABC):
             raise AdapterError(
                 f"adapter 名称不一致：{sample.adapter!r} != {self.name!r}")
 
+        # 编译器登记的「结构性必需可见」ID 不参与扫描 —— 见记录 schema 中
+        # structurally_visible_target_ids 的说明。
+        structural = set(record.get("structurally_visible_target_ids") or [])
+        target = {k: v for k, v in (record.get("hidden_target") or {}).items()
+                  if v not in structural}
         findings = scan_for_leakage(
-            sample.payload, record.get("hidden_target") or {},
-            record.get("evidence"), exempt_paths=sample.label_paths)
+            sample.payload, target, record.get("evidence"),
+            exempt_paths=sample.label_paths)
         if findings:
             raise LeakageError(
                 f"adapter {self.name!r} 在样本 {record.get('sample_id')} 的可见载荷中"
