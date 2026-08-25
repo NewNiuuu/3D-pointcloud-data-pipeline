@@ -23,12 +23,16 @@ three_d_necessity:
     - answer_changes_under_camera_pose_counterfactual_while_appearance_similar
 
 low_altitude_specificity:
+  # 2026-08-25 修正：原 rationale 声称候选实体包含电线/杆塔并将本任务定位为
+  # 净空评估的最小形式 —— 该声明与数据事实不符。UAVScenes 为 33 m 近垂直下视
+  # 航测数据，无薄障碍，也不存在航线净空场景。见 SPEC §40.1。
   rationale: >
-    观察者为飞行中的无人机，距离以其当前三维位置为基准；候选实体包含电线、
-    杆塔等低空飞行需要保持净空的细长障碍。该问题是净空评估的最小形式。
+    观察者为飞行中的无人机，距离以其当前三维位置与对地高度为基准。
+    近垂直下视图像几乎不提供深度线索 —— 同色的屋顶、地面与水面在 nadir 视角下
+    外观相近，米制距离必须由三维几何计算，无法从图像外观读出。
   signals:
-    - uav_pose_altitude_heading
-    - thin_obstacle_or_sparse_open_air_geometry
+    - uav_pose_altitude_nadir_geometry
+    - weak_depth_cue_from_nadir_view
 
 required_scene_capabilities:
   scale_status: metric        # 铁律 8：绝对米制目标只能出在 metric 场景

@@ -24,11 +24,12 @@ three_d_necessity:
 
 low_altitude_specificity:
   rationale: >
-    观察者是飞行中的无人机，其朝向随航迹持续变化，且存在俯视角度下"前方"与
-    "下方"混淆的特有情形；方位判断直接服务于航向决策。
+    观察者是飞行中的无人机，其朝向随飞行持续变化。近垂直下视时"前方"与"下方"
+    的区分尤其依赖位姿而非外观 —— 这是俯视视角特有的歧义来源。
+    （2026-08-25：原 signals 含 aerial_active_view，属主动感知，已按 SPEC §40.1 移除。）
   signals:
-    - uav_pose_altitude_heading
-    - aerial_active_view_or_visibility_requirement
+    - uav_pose_altitude_nadir_geometry
+    - weak_depth_cue_from_nadir_view
 
 required_scene_capabilities:
   scale_status: metric

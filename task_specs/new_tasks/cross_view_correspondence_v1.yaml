@@ -29,9 +29,10 @@ low_altitude_specificity:
     低空飞行的视角变化幅度远大于地面驾驶或室内场景：同一目标可在数秒内从
     斜视变为近乎正下方俯视，且尺度随高度剧变。这正是该任务要检验的能力。
   signals:
-    - uav_pose_altitude_heading
-    - aerial_active_view_or_visibility_requirement
+    - uav_pose_altitude_nadir_geometry
     - low_altitude_scene_content
+    # 2026-08-25：移除 aerial_active_view_or_visibility_requirement（属主动感知，
+    # 航测航线预先规划，无主动视角决策）。见 SPEC §40.1。
 
 required_scene_capabilities:
   scale_status: metric

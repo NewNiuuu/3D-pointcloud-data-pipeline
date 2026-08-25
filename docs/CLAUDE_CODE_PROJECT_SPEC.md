@@ -1,11 +1,35 @@
 # Low-Altitude 2D-to-3D Data Generation Pipeline
 
+> ## ⚠️ 能力范围重定义（2026-08-25，[用户已确认]）
+>
+> **本规格 v0.2.0 中关于「低空差异化能力」的定义已被推翻并替换。**
+>
+> 原定义（薄障碍 / 可飞行体积 / 净空 / 航迹 / TTC / Next-best-view / occupancy）
+> 是在**尚未获得数据**时做的规划。首批数据集 UAVScenes 落地后实测发现：
+>
+> - **相机为近垂直下视，俯角中位 87.6°（范围 84.6–88.8°），对地约 33 m；**
+> - 这是**航测飞行，不是导航飞行** —— 相机永远看不到飞行方向前方的障碍。
+>
+> 因此薄障碍、前向避障、通道净空、航迹可行性、TTC、Next-best-view 等能力
+> **在本数据集上无法产生有效监督**。强行生成会得到「看起来像导航训练数据、
+> 实际不是」的样本，训练出虚假能力 —— 这违反铁律 5。
+>
+> **新的能力范围见 §40。** 以下章节已按新定义重写：
+> §1（输出族）、§34（vertical slice）、§40（能力目标）、§43.2（低空特异性）、
+> §44/§45/§46（任务族）、§49（覆盖矩阵）、§51（发布顺序）。
+>
+> **§14.6（薄障碍）与 §14.7（可飞行空间）予以保留但当前不适用** ——
+> 它们是针对前视/侧视数据的正确规则，待引入此类数据集后再启用。
+>
+> 决策依据见 `PROJECT_HANDOFF.md` §19.5。
+
+
 ```yaml
 document_type: agent_implementation_spec
 target_reader: Claude Code
-spec_version: 0.2.0
-status: design_baseline
-fact_verification_cutoff: 2026-08-23
+spec_version: 0.3.0
+status: capability_scope_revised
+fact_verification_cutoff: 2026-08-25
 execution_target: remote_server
 local_workspace_role: design_and_control_plane
 ```
@@ -50,32 +74,37 @@ Low-altitude 2D datasets
           └── portable low-altitude 3D task supervision
 ```
 
-The initial output families are:
+The initial output families are（2026-08-25 按 §40 新能力范围修订）:
 
 - 3D Semantic / Instance Segmentation
-- 3D Object / Thin-Structure / Track Annotation
-- Metric, Viewpoint, Visibility, Occupancy, Route, and Risk Tasks
+- Perception Reliability and Failure Attribution（感知可信度与失效归因）
+- Landing Zone Assessment（安全降落区评估）
+- Metric Terrain and Height Reasoning（米制地形与高度推理）
+- Cross-temporal Change and Illumination Robustness（跨时相变化与光照鲁棒）
+- Cross-view Correspondence and Visibility
+
+以语言/结构化形式承载上述能力的题型：
 
 - 3D Grounding
 - 3D VQA
 - 3D Caption
-- 3D Task Decomposition
 - 3D Dialogue
 
 Candidate extensions include:
 
-- Cross-view 3D Correspondence
 - 3D Metadata Verification
 - 3D Metadata Completion
 - Viewpoint Transformation
-- Next-best-view Prediction
 - 3D Scene Graph Query
 - Geometry-aware Retrieval
-- 3D Change Reasoning
 - Spatial Counterfactual Simulation
 - Uncertainty-aware 3D Reasoning
-- Route / Plan Critique
 - Grounded Measurement Dialogue
+
+**已移出范围**（需前视/侧视导航数据，当前数据集不支持）：
+Thin-Structure Annotation、Occupancy / Flyable Volume、Route Feasibility、
+Minimum Clearance、TTC / Collision Risk、Next-best-view、Inspection-view Planning、
+Route / Plan Critique、3D Task Decomposition（其步骤绑定 waypoint 与航迹约束）。
 
 ## 2. Immutable Architecture Rules
 
@@ -391,7 +420,9 @@ Implementation requirements:
 4. Record all coordinate transforms.
 5. Record whether metric alignment was applied and its anchor.
 6. Generate geometry diagnostics for coverage, reprojection, density, drift, and invalid depth.
-7. Detect and flag likely dynamic ghosting, sky depth, water/glass failures, repeated-texture drift, and thin-structure loss.
+7. Detect and flag likely dynamic ghosting、sky depth、**water/glass/mirror failures**、
+   repeated-texture drift、以及**无纹理均质面**。
+   （2026-08-25：移除 thin-structure loss；新增的几项正是 §46.1 C1 的直接输入。）
 
 Metric scale example:
 
@@ -541,6 +572,9 @@ A combined invalid probability MAY be computed, but it MUST NOT replace the comp
 
 ### 14.6 Thin Obstacles
 
+> ⏸️ **当前数据集不适用（2026-08-25）。** UAVScenes 为 33 m 近垂直下视航测数据，
+> 无法为薄障碍提供有效监督。本节规则**本身正确**，保留待引入前视/侧视数据集后启用。见 §40.1。
+
 Thin-obstacle evidence is not mature enough to become automatic high-confidence truth.
 
 Every thin-obstacle observation MUST retain:
@@ -557,6 +591,9 @@ Every thin-obstacle observation MUST retain:
 A single-frame one-pixel detection without cross-frame or geometric support MUST be marked weak evidence or quarantined.
 
 ### 14.7 Flyable Space
+
+> ⏸️ **当前数据集不适用（2026-08-25）。** 可飞行空间需前视/侧视几何与航线上下文，
+> 近垂直下视无法支撑。本节推导链**本身正确**，保留待前视数据集。见 §40.1。
 
 No 2D segmentation model may directly emit the final `flyable_volume` truth.
 
@@ -722,16 +759,19 @@ Models MAY predict depth, normals, masks, tracks, visibility, embeddings, dynami
 
 Programs MUST compute:
 
-- depth-to-point transforms;
-- TSDF/voxel/ESDF occupancy;
-- free/occupied/unknown state;
-- ray visibility and occlusion;
-- object centroid, robust size, and PCA orientation;
-- clearance, reachability, candidate routes, and next-best-view information gain;
-- TTC, swept-volume collision, and risk propagation;
-- cross-frame consistency, expert disagreement, and confidence calibration.
+- depth-to-point transforms；
+- ray visibility and occlusion；
+- object centroid, robust size, and PCA orientation；
+- **平面拟合、坡度、粗糙度、平面度、连通域面积**（C2/C3 的真值来源）；
+- **LiDAR 与视觉深度的对齐残差及失效原因判定**（C1 的真值来源）；
+- **跨航次几何差分**（C4）；
+- cross-frame consistency, expert disagreement, and confidence calibration。
 
-Safety-critical clearance, TTC, collision risk, and flyability MUST NOT be estimated directly by Qwen or a general VLM.
+> **2026-08-25 移除**：TSDF/voxel/ESDF occupancy、free/occupied/unknown、clearance、
+> reachability、candidate routes、next-best-view information gain、TTC、swept-volume collision。见 §40.1。
+
+**安全相关的坡度、可降落性、深度可信度判定 MUST NOT 由 Qwen 或通用 VLM 直接估计** —— 必须由几何程序计算。
+（2026-08-25：原文为 clearance/TTC/collision risk/flyability，已按 §40.1 替换为当前范围内的安全量。）
 
 ## 15. 2D-to-3D Lifting and Fusion
 
@@ -795,17 +835,18 @@ IDs MUST be stable within a metadata snapshot. Cross-version ID lineage SHOULD b
 - cross-view correspondence;
 - topology and connectivity.
 
-### L3: Temporal, Functional, and Action Metadata
+### L3: Temporal, Reliability, and Surface Metadata（2026-08-25 重定义）
 
-- 3D trajectories, velocity, acceleration;
-- TTC;
-- occupancy and free space;
-- visibility coverage;
-- reachability;
-- routes and minimum clearance;
-- next-best-view;
-- scene change;
-- task preconditions and completion conditions.
+- **深度可信度与失效原因**（C1）：逐区域 reliable 标志、LiDAR-视觉残差、原因码；
+- **表面可降落性属性**（C2）：坡度、粗糙度、平面度、连通面积、语义风险、动态占用；
+- **地形量**（C3）：局部地面拟合面、高程统计、坡向；
+- **跨时相变化**（C4）：跨航次几何差分、变化类型、表观差异归因；
+- visibility coverage；
+- scene change。
+
+> **2026-08-25 移除**：3D trajectories/velocity/acceleration、TTC、occupancy and free space、
+> reachability、routes and minimum clearance、next-best-view、task preconditions/completion conditions。
+> 见 §40.1。
 
 Initial release MUST implement only the L3 fields required by selected tasks.
 
@@ -943,7 +984,10 @@ Required order:
 
 ### 20.3 Model-first constrained tasks
 
-Applicable to task decomposition, plan critique, and selected next-best-view tasks.
+Applicable to 需要模型先给候选、再由程序验证的任务。
+
+> **2026-08-25**：原文列举 task decomposition / plan critique / next-best-view，
+> 三者均已移出范围（§40.1）。本模式当前**无首批任务使用**，保留供后续扩展。
 
 Required order:
 
@@ -1086,7 +1130,9 @@ Checks:
 - recomputability of derived fields;
 - known geometry failure signatures.
 
-The gate MUST additionally validate residual-flow construction, invalid-geometry reason masks, separation of detector/mask/track confidence, and thin-obstacle support evidence.
+The gate MUST additionally validate residual-flow construction、invalid-geometry reason masks、
+separation of detector/mask/track confidence、以及 **LiDAR 与视觉深度残差的可重算性**。
+（2026-08-25：原文末项为 thin-obstacle support evidence，已按 §40.1 替换。）
 
 ### 23.5 `task-spec-designer`
 
@@ -1399,7 +1445,8 @@ Hard failures MUST NOT be converted into a weighted quality score. Only gate-pas
 Expert and lifting validation SHOULD additionally track:
 
 - mask AP, mIoU, and boundary F-score;
-- thin-structure recall, skeleton precision, connectivity, and 3D line-fit residual;
+- **平面拟合残差、坡度估计误差、可降落区 IoU**（C2/C3）；
+- **深度可信度判定的 AUC 与失效原因分类准确率**（C1）；
 - tracking J&F, HOTA, IDF1, and ID switches;
 - optical-flow EPE, forward/backward error, and ego-compensated dynamic IoU;
 - lifted-point purity/completeness, cross-view 3D IoU, and reprojection IoU;
@@ -1583,10 +1630,12 @@ metadata_scope:
   entities: [object]
   required_geometry: [camera, depth, point_cloud, centroid, obb, visibility]
 
-task_scope:
+task_scope:                            # Release A，见 §51
   - 3d_grounding.object
   - 3d_vqa.metric_or_situated
-  - cross_view_correspondence          # RESOLVED 2026-08-24 (chosen over metadata_verification)
+  - cross_view_correspondence          # RESOLVED 2026-08-24
+# Release B（§40.3 的 C1–C4）在 Release A 跑通后接入，
+# 其中 C1 感知可信度为最高优先级
 
 evaluation:
   - 2d_only
@@ -1624,7 +1673,8 @@ Vertical-slice order:
 12. Audit samples and run dependency baselines.
 13. Add DSINE only after testing whether independent normals provide measurable information gain.
 14. Evaluate DA3-1.1 disagreement calibration; add DA3-Streaming only for long-video scope.
-15. Only then consider Trace Anything, WorldMirror evaluation, thin-obstacle expansion, or additional L3 metadata.
+15. Only then consider Trace Anything、WorldMirror evaluation、或 §40.3 的 C1–C4 能力扩展。
+    （2026-08-25：原文的 thin-obstacle expansion 已移出范围，见 §40.1。）
 
 ## 35. Implementation Stop Conditions
 
@@ -1743,58 +1793,125 @@ Multimodal 3D adapter
 
 Qwen still MUST NOT consume raw point clouds in the current architecture. Point-cloud references remain part of the canonical annotation so future 3D models can use the same data.
 
-## 40. Capability Objective
+## 40. Capability Objective（2026-08-25 重定义）
 
-The dataset SHOULD complement abilities commonly underrepresented in indoor or ground-driving 3D training data:
+### 40.1 重定义的依据
 
-- oblique, nadir, and rapidly changing aerial viewpoints;
-- observer-pose-dependent spatial reasoning;
-- altitude and metric-scale reasoning;
-- sparse, thin, and safety-critical obstacles;
-- open-air free/unknown/occupied space;
-- long-range visibility and occlusion;
-- cross-view identity under large viewpoint changes;
-- dynamic obstacles under UAV ego-motion;
-- route clearance, flyability, TTC, and swept-volume risk;
-- active perception and next-best-view;
-- uncertainty-aware decisions in sky/water/glass/weak-geometry regions.
+首批数据集 UAVScenes 实测：**相机近垂直下视，俯角中位 87.6°（范围 84.6–88.8°），
+对地约 33 m**。这是航测/测绘飞行，相机**永远看不到飞行方向前方**。
+
+由此产生的硬约束：
+
+| 原设想能力 | 在本数据集上的可行性 |
+|---|---|
+| 前向避障、通道净空、航迹可行性 | ❌ 相机几何不支持 —— 看不到前方 |
+| 薄障碍（电线/细枝）避让 | ❌ 33 m 下视，且它们不在航线上 |
+| TTC / 动态碰撞风险 | ❌ 无前视，动态目标稀少且像素占比极小 |
+| Next-best-view / 主动感知 | ❌ 航测航线预先规划，无主动视角决策 |
+| 有人驾驶飞机、鸟类避让 | ❌ 数据中不存在 |
+
+**MUST NOT** 在本数据集上生成上述任务。强行生成会产出「形似导航训练数据、
+实则无效监督」的样本，训练出虚假能力，违反铁律 5。
+
+### 40.2 新的能力范围
+
+设计原则**不是**「无人机需要什么能力」，而是
+**「哪些能力的监督信号极难获得，而本数据集恰好能可靠产出」**。
+
+三种难获取的监督形态，本数据集均可大规模产出：
+
+| 监督形态 | 为何难获取 | 本数据集为何能产出 |
+|---|---|---|
+| **与外观矛盾的答案** | 需要能反驳视觉的独立真值源 | LiDAR 米制真值 vs 视觉深度的残差 |
+| **外观相同但答案不同** | 需要米制位姿做反事实 | RTK 验证过的 6-DoF 位姿 |
+| **无外观对应物的数值** | 需要米制几何真值 | LiDAR + 标定 |
+
+模型在图像-答案对上训练时会学到「外观→答案」的捷径。**凡是捷径能解决的能力都不缺数据；
+凡是捷径会给出错误答案的能力，才是真正的空白。**
+
+### 40.3 四类目标能力（按优先级）
+
+#### C1 感知可信度与失效归因（最高优先级）
+
+模型须判断**当前区域的视觉深度是否可信，以及不可信的原因**，而非强行给出一个深度。
+
+- 依据：LiDAR 与视觉深度的残差可程序化产出**失效区域标注**；
+- 天然大样本：HKisland 约 40% 为水面类别，HKairport 约 52% 为均质硬化面；
+- 受控实验：`*_GNSS_Evening` 与日间航次**同地点同航线**，几何真值相同、成像退化 ——
+  同一问题白天应答准、傍晚应答「不确定」；
+- 失效原因必须分别保留（§14.5）：`water`、`reflection_or_transparency`、
+  `low_depth_confidence`、`sky`、`reprojection_inconsistent`、纹理缺失。
+
+这对应社区调研的头号诉求：飞手最怕的不是损失飞机，而是**不知道系统当前状态是否可信**。
+
+#### C2 安全降落区评估
+
+**垂直下视正是评估降落区的视角** —— 这是本数据集在几何上完全匹配的安全能力。
+
+真值来源齐备：
+
+- **几何**：坡度、粗糙度、平面度、连通面积 —— 由 LiDAR 确定性计算（强监督）；
+- **语义**：人工标注的表面类型；
+- **动态占用**：同地点重复航次；
+- **可信度**：与 C1 联动 —— 深度不可信区域**不得**判为可降落。
+
+核心判据是「平坦 ≠ 可降落」：水面平、车顶平、人群上方也平。必须几何与语义联合判断。
+
+#### C3 米制地形与高度推理
+
+垂直下视图像**几乎不提供深度线索** —— 同色的屋顶与地面在 nadir 视角下外观相近。
+但 LiDAR 给出精确答案。
+
+因此这类任务的 3D 必要性最强：**答案与外观几乎无关**，模型无法用外观捷径蒙对。
+典型量：坡度（度）、两点高差（米）、结构相对地面高度、地形起伏幅度。
+
+#### C4 跨时相变化与光照鲁棒
+
+`*_GNSS_Evening` 与日间航次配对，同地点同几何。可区分
+**真实的三维变化** 与 **仅由光照/成像条件造成的表观差异**。
+
+### 40.4 保留但当前不适用
+
+§14.6（薄障碍证据规则）与 §14.7（可飞行空间推导链）**规则本身正确**，
+只是本数据集不提供相应输入。引入前视/侧视数据集后**应当**启用，届时无需重写。
 
 ## 41. Canonical Task Record
 
 ```json
 {
   "sample_id": "task_sample_...",
-  "task_spec_id": "uav.route.minimum_clearance@0.1.0",
+  "task_spec_id": "uav.reliability.depth_trustworthiness@0.1.0",
   "scene_id": "scene_000018",
-  "capability_tags": ["metric_geometry", "navigation", "risk"],
-  "low_altitude_tags": ["flight_corridor", "thin_obstacle"],
+  "capability_tags": ["perception_reliability", "failure_attribution"],
+  "low_altitude_tags": ["nadir_view", "water_surface"],
   "supervision_level": "deterministic_derived",
   "inputs": {
     "pointcloud_ref": "scene.ply",
-    "visual_inputs": ["f0012.jpg", "f0015.jpg"],
+    "visual_inputs": ["f0012.jpg"],
     "camera_refs": ["<pose_007>"],
     "metadata_snapshot_id": "meta_...",
     "visible_metadata_fields": []
   },
   "hidden_target": {
-    "target_type": "route_clearance",
-    "route_id": "<route_002>",
-    "minimum_clearance_m": 1.35,
-    "closest_obstacle_id": "<wire_004>"
+    "target_type": "depth_reliability",
+    "region_id": "<region_009>",
+    "reliable": false,
+    "failure_reason": "water",
+    "lidar_vision_residual_m": 4.82
   },
   "target_geometry": {
-    "route_ref": "routes/route_002.json",
-    "obstacle_point_indices_ref": "indices/wire_004.bin"
+    "region_point_indices_ref": "indices/region_009.bin",
+    "lidar_reference_ref": "lidar/f0012.npy"
   },
   "evidence": {
-    "used_entities": ["<route_002>", "<wire_004>"],
+    "used_entities": ["<region_009>"],
     "used_fields": [],
-    "derivation_program": "minimum_route_to_centerline_clearance"
+    "derivation_program": "lidar_vision_depth_residual_with_reason"
   },
   "checker": {
-    "name": "check_route_clearance",
+    "name": "check_depth_reliability",
     "version": "0.1.0",
-    "tolerance_m": 0.1
+    "residual_threshold_m": 1.0
   },
   "quality": {},
   "provenance": {},
@@ -1802,16 +1919,19 @@ The dataset SHOULD complement abilities commonly underrepresented in indoor or g
 }
 ```
 
+> **2026-08-25**：本示例原为 `uav.route.minimum_clearance`（航迹净空），
+> 该任务族已按 §40.1 移出范围，示例改为 C1 感知可信度。
+
 Every target MUST map to at least one concrete 3D anchor:
 
-- point indices or point mask;
-- object/part ID and OBB;
-- centerline or surface;
-- voxel/occupancy region;
-- camera/observer pose;
-- 3D trajectory;
-- route/waypoint graph;
-- deterministic spatial relation over these anchors.
+- point indices or point mask；
+- object/part ID and OBB；
+- surface / plane fit（地面、屋顶、水面 —— 可降落性与地形推理的锚点）；
+- **region 区域**（voxel 或点集，如可降落区、深度不可信区）；
+- camera/observer pose；
+- deterministic spatial relation over these anchors。
+
+> **2026-08-25 移除**：centerline（薄结构）、3D trajectory、route/waypoint graph。见 §40.1。
 
 ## 42. Supervision Levels
 
@@ -1845,20 +1965,23 @@ At least one condition MUST hold:
 - target requires metric/relative 3D geometry;
 - target is anchored to point-cloud entities not uniquely identifiable from one 2D view;
 - answer changes under camera-pose or spatial counterfactual while appearance remains similar;
-- task requires cross-view, occlusion, trajectory, occupancy, route, or topology information;
+- task requires cross-view、occlusion、topology、**地形几何**、或**独立真值与视觉的分歧**信息；
 - a 2D-only baseline is demonstrably insufficient on the selected subset.
 
-### 43.2 Low-Altitude Specificity
+### 43.2 Low-Altitude Specificity（2026-08-25 重定义）
 
-Each low-altitude-specialized task MUST use at least one of:
+Each low-altitude-specialized task MUST use at least one of：
 
-- UAV pose, altitude, heading, or camera orientation;
-- thin obstacle or sparse open-air geometry;
-- flyable/free/unknown volume;
-- flight corridor, clearance, reachability, or route constraint;
-- aerial active-view or visibility requirement;
-- ego-motion-compensated dynamic risk;
-- low-altitude scene content such as poles, wires, towers, vegetation, roofs, vehicles, people, or aerial targets.
+- **UAV 位姿、对地高度与近垂直下视几何**（俯角、飞行高度、地面采样距离）；
+- **视觉深度与独立真值（LiDAR）的分歧区域**，含其失效原因码；
+- **航拍表面的可降落性属性**：坡度、粗糙度、平面度、连通面积、语义风险、动态占用；
+- **米制地形量**：高差、起伏幅度、结构相对地面高度 —— 这些在 nadir 视角下无外观对应物；
+- **同地点跨航次/跨时段的重复观测**（`*_GNSS` 与 `*_GNSS_Evening` 变体）；
+- **航测视角特有的弱深度线索**：低深度起伏、同色平面歧义、阴影与反射。
+
+**MUST NOT** 再以下列信号主张低空特性（当前数据集无法支撑，见 §40.1）：
+薄障碍、可飞行体积、飞行走廊净空、航迹可达性、ego-motion 补偿后的动态风险、
+主动视角/Next-best-view。
 
 ### 43.3 Verifiability
 
@@ -1874,46 +1997,93 @@ Each low-altitude-specialized task MUST use at least one of:
 
 | Task | Input | Target | Low-altitude contribution |
 |---|---|---|---|
-| 3D semantic segmentation | point cloud/voxel | point-wise semantic IDs | aerial roofs, vegetation, poles, wires, open-air regions |
-| 3D instance segmentation | point cloud + optional images | instance point masks and stable IDs | sparse objects and large viewpoint changes |
-| 3D object detection | point cloud/multimodal | centroid, size, orientation, OBB | oblique-view vehicles, people, towers, aerial targets |
-| Thin-structure extraction | point cloud + wire masks | centerline, endpoints, connectivity, uncertainty | power lines, cables, branches, fences |
-| Surface/region parsing | cloud/mesh | ground, roof, facade, vegetation, water, unknown regions | low-altitude scene layout |
-| 3D tracking | point cloud sequence + cameras | object trajectory, visibility, velocity, covariance | moving objects under strong UAV ego-motion |
+| 3D semantic segmentation | point cloud/voxel | point-wise semantic IDs | 航拍地表、屋顶、植被、水面、硬化面 |
+| 3D instance segmentation | point cloud + optional images | instance point masks and stable IDs | 大视角变化下的稀疏对象 |
+| 3D object detection | point cloud/multimodal | centroid, size, orientation, OBB | 俯视视角的建筑、车辆、地面结构 |
+| Surface/region parsing | cloud/mesh | 地面、屋顶、立面、植被、水面、unknown | 航拍场景布局与可降落性的输入 |
+| 3D tracking | point cloud sequence + cameras | trajectory, visibility, velocity, covariance | 数据中动态目标稀少，**首批不做** |
 
-Weak thin-structure targets MUST remain distinguishable from verified labels.
+> **2026-08-25 移除**：Thin-structure extraction（电线/缆索/细枝的 centerline 与连通性）。
+> 33 m 近垂直下视无法提供有效监督，且这些结构不在航线上。规则保留在 §14.6 待前视数据集。
 
 ## 45. Task Family B: 3D Spatial and Viewpoint Reasoning
 
 | Task | Required metadata | Target/checker |
 |---|---|---|
-| Metric measurement | metric scale, object geometry, pose | distance/size/height/angle with tolerance |
+| Metric measurement | metric scale, object geometry, pose | 距离/尺寸/高度/角度 + 容差 |
 | Observer-relative relation | observer pose, object centers/OBBs | left/right/front/behind/above/below |
-| Structural topology | objects, centerlines, surfaces | connect/intersect/contain/support/hang |
-| Visibility and occlusion | cameras, depth, object geometry | visible ratio, occluder ID, best view |
-| Cross-view correspondence | masks, cameras, point support, embedding | same-object link and probability |
-| Viewpoint transformation | two observer poses, object geometry | transformed situated relations |
-| Spatial counterfactual | editable pose/object/route state | recomputed relations, visibility, or risk |
-| Geometry-aware retrieval | scene/object spatial signature | matching scene/object group/trajectory |
+| Structural topology | objects, surfaces | connect/intersect/contain/support |
+| Visibility and occlusion | cameras, depth, object geometry | 可见比例、遮挡者 ID |
+| Cross-view correspondence | masks, cameras, point support, embedding | same-object link + probability |
+| Viewpoint transformation | two observer poses, object geometry | 变换后的 situated relations |
+| Spatial counterfactual | 可编辑的位姿/对象状态 | 重算后的关系或可见性 |
+| Geometry-aware retrieval | scene/object spatial signature | 匹配的场景/对象组 |
 
 These tasks SHOULD include hard cases where similar 2D appearance corresponds to different 3D answers.
+**近垂直下视天然富含此类困难样本** —— 同色平面、阴影、反射在图像上高度相似而三维答案不同。
 
-## 46. Task Family C: Low-Altitude Flight, Safety, and Active Perception
+> **2026-08-25 移除**：`best view` 选择（属主动感知，航测航线预先规划，无此决策）。
+
+## 46. Task Family C: Aerial Perception Reliability, Landability, and Metric Terrain
+
+> **本节于 2026-08-25 整体重写。** 原内容（Occupancy / Flyable Volume / Route Feasibility /
+> Minimum Clearance / Corridor Bottleneck / Dynamic Collision Risk / Thin-obstacle Avoidance /
+> Next-best-view / Inspection-view Planning / Unknown-space Decision）针对前视导航数据，
+> **在近垂直下视的航测数据上无法产生有效监督**，已全部移除。原设计保留在
+> `PROJECT_HANDOFF.md` §18.2 作为历史，待引入前视/侧视数据集后可重新启用。
+
+### 46.1 C1 感知可信度与失效归因
 
 | Task | 3D target | Deterministic basis |
 |---|---|---|
-| Occupancy/free/unknown prediction | voxel state or probability | TSDF/voxel/raycast plus uncertainty |
-| Flyable-volume segmentation | safe/unsafe/unknown volume | occupancy + UAV radius + safety margin |
-| Route feasibility | feasible flag and failure reason | swept UAV volume versus obstacles/unknown space |
-| Minimum-clearance estimation | clearance and closest obstacle | route-to-surface/centerline distance |
-| Corridor bottleneck localization | region/waypoint and limiting obstacle | ESDF minima along route |
-| Dynamic collision risk | TTC, collision probability, swept-volume overlap | trajectory/covariance propagation |
-| Thin-obstacle avoidance | safe side/waypoint/clearance | wire centerline + uncertainty inflation |
-| Next-best-view | selected candidate pose | visibility gain, occlusion, travel cost, uncertainty |
-| Inspection-view planning | ordered poses and coverage | target surface visibility and constraints |
-| Unknown-space-aware decision | proceed/stop/request-view | free/unknown balance and risk threshold |
+| 深度可信度判定 | 逐区域 `reliable / unreliable` + 置信区间 | LiDAR 与视觉深度的对齐残差超阈值 |
+| 失效原因归因 | `water` / `reflection_or_transparency` / `low_depth_confidence` / `sky` / `texture_poor` | §14.5 各原因掩码 + 语义标注 + 残差模式 |
+| 不确定性感知回答 | `answer` / `interval` / `unknown` / `request_view` | 该区域是否通过可信度门限 |
+| 跨时段可信度对照 | 同问题在日间/傍晚航次的答案与置信度变化 | `*_Evening` 与日间航次同地点配对 |
 
-No task in this family may use a general VLM estimate as its numerical truth.
+**这是本数据集最不可替代的能力。** target 由 LiDAR 与视觉深度的残差**程序化产生**，
+不依赖人工标注。所有失效原因 MUST 分别保留，不得合并为单一 invalid 概率（§14.5）。
+
+### 46.2 C2 安全降落区评估
+
+| Task | 3D target | Deterministic basis |
+|---|---|---|
+| 表面坡度估计 | 坡度（度）+ 局部法向 | LiDAR 平面拟合 |
+| 粗糙度/平面度评估 | 残差 RMS、最大起伏 | LiDAR 到拟合平面的残差 |
+| 可降落区分割 | `landable / unlandable / unknown` 区域 | 几何 + 语义 + 可信度**三者联合** |
+| 最大可降落连通面积 | 面积（m²）与其边界 | 满足坡度/粗糙度阈值的连通域 |
+| 动态占用判定 | 该区域当前是否被占用 | 同地点重复航次的差分 |
+| 降落风险排序 | 候选区域排序 + 排除理由 | 语义风险等级 + 几何 + 可信度 |
+
+**硬性规则：**
+
+1. **「平坦」不构成可降落。** 水面、车顶、人群上方均满足平面度。判定 MUST 联合语义。
+2. **深度不可信区域 MUST NOT 判为可降落**（C1 与 C2 联动）。
+3. 安全相关的坡度、面积、净空数值 MUST 由几何程序计算，**不得**由 VLM 估计（§14.15）。
+
+### 46.3 C3 米制地形与高度推理
+
+| Task | 3D target | Deterministic basis |
+|---|---|---|
+| 两点高差 | 高差（米） | LiDAR/点云沿重力方向的差值 |
+| 结构相对地面高度 | 高度（米）+ 地面参考面 | 局部地面拟合 + 结构顶面 |
+| 地形起伏幅度 | 区域内高程极差/标准差 | LiDAR 高程统计 |
+| 坡向与坡度 | 方位角 + 倾角 | 平面拟合法向 |
+| 地面采样距离推断 | GSD（米/像素） | 对地高度 + 内参 |
+
+**3D 必要性论证**：近垂直下视图像几乎不提供深度线索 —— 同色屋顶与地面外观相近。
+这些数值**没有外观对应物**，模型无法用外观捷径蒙对。这是本族任务价值最高之处。
+
+### 46.4 C4 跨时相变化与光照鲁棒
+
+| Task | 3D target | Deterministic basis |
+|---|---|---|
+| 真实三维变化检测 | 变化区域 + 变化类型（新增/移除/移动） | 跨航次点云差分 |
+| 表观差异归因 | `geometric_change` vs `illumination_only` | 几何差分为零但外观差异显著 |
+| 光照鲁棒性对照 | 同问题在日/暮航次的答案一致性 | `*_Evening` 配对 |
+
+**关键判据**：外观变了但几何没变 → 是光照/成像差异，**不是**场景变化。
+这正是「视觉系统不知道自己看不清」的直接检验。
 
 ## 47. Task Family D: Grounded 3D Language and Interaction
 
@@ -1923,35 +2093,46 @@ Targets MAY be object IDs, point masks, OBBs, parts, centerlines, regions, route
 
 Required subtypes:
 
-- object/part grounding;
-- relational and observer-relative grounding;
-- occluded-object grounding;
-- thin-obstacle grounding;
-- route/waypoint/trajectory grounding.
+- object/part grounding；
+- relational and observer-relative grounding；
+- occluded-object grounding；
+- **surface/region grounding**（可降落区、水面、特定坡度区域 —— 新增）。
+
+> **2026-08-25 移除**：thin-obstacle grounding、route/waypoint/trajectory grounding。见 §40.1。
 
 ### 47.2 3D VQA
 
 Required capability groups:
 
-- metric geometry;
-- situated relations;
-- topology;
-- visibility/occlusion;
-- temporal motion and TTC;
-- route/clearance/risk;
-- viewpoint transformation;
-- uncertainty and evidence sufficiency;
-- spatial counterfactuals.
+- metric geometry；
+- **metric terrain**（高差、坡度、起伏 —— 见 §46.3）；
+- situated relations；
+- topology；
+- visibility/occlusion；
+- **perception reliability and failure attribution**（见 §46.1）；
+- **landability**（见 §46.2）；
+- **cross-temporal change**（见 §46.4）；
+- viewpoint transformation；
+- uncertainty and evidence sufficiency；
+- spatial counterfactuals。
+
+> **2026-08-25 移除**：temporal motion and TTC、route/clearance/risk。见 §40.1。
 
 ### 47.3 3D Caption
 
-Caption targets SHOULD cover object, part, region, scene layout, trajectory, visibility, risk, and flight-corridor descriptions. Every caption MUST retain structured claims.
+Caption targets SHOULD cover object、region、scene layout、visibility、**深度可信度**、
+**可降落性**与**地形特征**描述。（2026-08-25：移除 trajectory 与 flight-corridor，见 §40.1。） Every caption MUST retain structured claims.
 
 ### 47.4 3D Dialogue
 
-Dialogue SHOULD test cross-turn grounding, changing observer pose, metadata updates, clarification under ambiguity, uncertain geometry, and route/risk revision.
+Dialogue SHOULD test cross-turn grounding、changing observer pose、metadata updates、
+clarification under ambiguity、uncertain geometry、以及**可信度与可降落判断的修正**。
+（2026-08-25：移除 route/risk revision，见 §40.1。）
 
 ### 47.5 3D Task Decomposition and Plan Critique
+
+> ⏸️ **移出当前范围（2026-08-25）。** 其步骤绑定 waypoint、航迹约束与前置/完成条件，
+> 依赖导航语义，近垂直下视航测数据无法支撑。见 §40.1。
 
 Each step MUST bind action, target ID, goal pose/region, spatial constraints, preconditions, completion conditions, and evidence. Include plan verification, conflict detection, missing-step completion, and infeasibility explanation.
 
@@ -1969,36 +2150,40 @@ Each step MUST bind action, target ID, goal pose/region, spatial constraints, pr
 
 VLM-generated scene-graph relations are proposals, not unquestioned truth.
 
-## 49. Capability Coverage Matrix
+## 49. Capability Coverage Matrix（2026-08-25 重定义）
 
 Every release MUST report coverage by:
 
 ```text
-perception
-metric_geometry
-viewpoint_reasoning
-cross_view_identity
-visibility_occlusion
-thin_structure
-temporal_motion
-occupancy_navigation
-flight_safety
-active_perception
-uncertainty
-grounded_language
-planning_dialogue
+perception                  原生 3D 感知（语义/实例/检测/表面解析）
+metric_geometry             米制测量
+metric_terrain              地形高差、坡度、起伏           ← 新增（C3）
+perception_reliability      深度可信度判定                 ← 新增（C1）
+failure_attribution         失效原因归因                   ← 新增（C1）
+landability                 可降落性评估                   ← 新增（C2）
+viewpoint_reasoning         观察者相对与视角变换
+cross_view_identity         跨视角身份
+visibility_occlusion        可见性与遮挡
+temporal_change             跨时相变化                     ← 新增（C4）
+illumination_robustness     光照鲁棒性                     ← 新增（C4）
+uncertainty                 不确定性表达
+grounded_language           语言与三维实体绑定
 ```
+
+> **2026-08-25 移除**：`thin_structure`、`temporal_motion`、`occupancy_navigation`、
+> `flight_safety`、`active_perception`、`planning_dialogue`。见 §40.1。
 
 It MUST also report distributions across:
 
-- real/simulated;
-- metric/externally anchored/relative;
-- altitude band;
-- nadir/oblique/front view;
-- static/dynamic;
-- clear/occluded;
-- strong/deterministic/pseudo/weak supervision;
-- urban/rural/forest/water/industrial/power-infrastructure scenes.
+- real/simulated；
+- metric / externally anchored / relative；
+- 对地高度分段；
+- **深度可信 / 不可信 / 未判定**（新增，C1 的直接产物）；
+- **可降落 / 不可降落 / 未判定**（新增，C2）；
+- 日间 / 傍晚航次（新增，C4）；
+- static/dynamic；clear/occluded；
+- 强监督 / 程序派生 / 过滤伪标签 / 弱标签；
+- 地点类型：城镇 / 山谷 / 机场 / 岛屿水域。
 
 ## 50. Task Quality Gates
 
@@ -2019,32 +2204,39 @@ Before release, each task sample MUST pass:
 
 Dataset-level validation MUST include 2D-only, metadata-only, 2D+metadata, pointcloud-only where applicable, metadata masking/shuffling, and spatial counterfactuals.
 
-## 51. Recommended Task Release Order
+## 51. Recommended Task Release Order（2026-08-25 重定义）
 
-### Release A: Core portable supervision
+### Release A：可移植的基础监督
 
-- 3D semantic/instance segmentation;
-- object/part/thin-structure grounding;
-- metric and situated 3D VQA;
-- cross-view correspondence;
-- visibility/occlusion;
-- metadata verification and uncertainty targets.
+- 3D 语义/实例分割；
+- 对象级 3D Grounding；
+- metric 与 situated 3D VQA；
+- 跨视角对应；
+- 可见性/遮挡。
 
-### Release B: Low-altitude specialization
+**作用**：验证点云与 metadata 的绑定接口是否成立。首批实施对象。
 
-- thin-obstacle centerline and clearance;
-- occupancy/free/unknown;
-- flyable-volume segmentation;
-- route feasibility and bottleneck localization;
-- dynamic tracks, TTC, and swept-volume risk;
-- next-best-view and inspection coverage.
+### Release B：航拍差异化能力（本项目的核心贡献）
 
-### Release C: Language, planning, and long-horizon reasoning
+按 §40.3 的优先级：
 
-- grounded 3D caption;
-- pose-changing dialogue;
-- task decomposition and plan critique;
-- scene-graph query/completion;
-- change reasoning and spatial counterfactuals.
+1. **C1 感知可信度与失效归因** —— 深度可信度判定、失效原因归因、不确定性感知回答；
+2. **C2 安全降落区评估** —— 坡度/粗糙度/可降落分割/动态占用/风险排序；
+3. **C3 米制地形与高度推理** —— 高差、结构高度、起伏、坡向、GSD；
+4. **C4 跨时相变化与光照鲁棒** —— 真实三维变化 vs 表观差异归因。
 
-Release A SHOULD be implemented first because it validates the point-cloud/metadata grounding interface. Release B is the primary low-altitude differentiator. Release C SHOULD only use structured targets and claims that already pass deterministic or independent validation.
+**这一组取代原「低空专项能力」，是本数据集不可替代之处。**
+
+### Release C：语言与长时程推理
+
+- Grounded 3D Caption（含可信度与可降落性描述）；
+- 位姿变化下的多轮对话；
+- Scene Graph 查询与补全；
+- 空间反事实推理。
+
+**MUST** 只使用已通过确定性或独立验证的结构化 target 与 claims。
+
+> **2026-08-25 移除**：原 Release B 的薄障碍中心线与净空、occupancy/free/unknown、
+> 可飞行体积分割、航迹可行性与瓶颈定位、动态轨迹/TTC/扫掠体风险、Next-best-view 与检查覆盖；
+> 原 Release C 的任务分解与计划批判（其步骤绑定 waypoint 与航迹约束）。
+> 详见 §40.1。这些设计保留在 `PROJECT_HANDOFF.md` §18.2，引入前视数据集后可启用。

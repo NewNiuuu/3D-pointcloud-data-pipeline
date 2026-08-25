@@ -69,7 +69,7 @@ Skill 用于规定 Agent 如何决策、读取哪些规范、调用哪些校验�
 |---|---|---|---|
 | Program-first | Grounding、metric VQA、cross-view correspondence | 几何程序、匹配器、原生标注 | 问题自然化、指代理解、结构化回答 |
 | Hybrid | Caption、Dialogue、Metadata Verification | 程序生成 claims/冲突，再由模型表达 | 组织语言、跨轮推理、解释 |
-| Model-first constrained | Task Decomposition、Next-best-view 候选解释 | 模型先生成候选，程序和规则验证 | 规划、解释、修复不满足约束的候选 |
+| Model-first constrained | *（当前无首批任务使用）* | 模型先生成候选，程序和规则验证 | 规划、解释、修复候选<br/>**2026-08-25：原列 Task Decomposition 与 Next-best-view，二者已移出范围，见 SPEC §40.1** |
 
 ### 3.3 生成与评估解耦
 
@@ -177,7 +177,8 @@ Orchestrator 不应：
 - detector、mask、track、depth 和关联置信度是否被错误压成单一分数；
 - 动态概率是否基于扣除相机自运动后的 residual flow；
 - `sky`、`water`、`reflection_or_transparency`、`low_depth_confidence`、`reprojection_inconsistent`、`dynamic_geometry` 等 reason mask 是否分别保存；
-- 薄障碍是否保存概率、骨架、边界置信度、多帧支持和 3D 拟合残差。
+- ~~薄障碍是否保存概率、骨架、边界置信度、多帧支持和 3D 拟合残差~~ —— **当前不适用**（SPEC §40.1）。
+  等价的现行检查：**LiDAR 与视觉深度的残差及失效原因码是否可重算、是否分别保存**。
 - metric、externally anchored、relative、affine-invariant、pseudo depth 是否被严格区分；
 - metric 测试是否在 Sim(3) 对齐前报告原始尺度误差；
 - 多专家结果是否先计算残差并校准，而不是直接平均或投票；
@@ -194,7 +195,8 @@ Orchestrator 不应：
 - 将点云、相机、对象、关系、轨迹、occupancy和质量字段映射为Task Spec；
 - 为每个任务定义能力标签、低空标签、监督等级、可见字段、隐藏target、3D目标锚点和checker；
 - 保证任务具有3D必要性，避免仅靠单张2D图像或字段查找解决；
-- 保证低空专项任务使用位姿、高度、薄障碍、可飞行空间、航迹、动态风险或主动视角信息；
+- 保证低空专项任务使用**下视几何、对地高度、深度可信度、可降落性属性、米制地形量或跨航次重复观测**；
+  （2026-08-25：原文为「薄障碍、可飞行空间、航迹、动态风险或主动视角」，已按 SPEC §40 重定义。）
 - 维护原生点云、Qwen 2D+metadata、多模态3D三类adapter；
 - 输出能力覆盖矩阵，防止不同题型只是在重复测试同一能力。
 
@@ -451,7 +453,10 @@ Cross-view Correspondence、Metadata Verification、Viewpoint Transformation、N
 - 深度分歧、法向角误差和尺度漂移；
 - ECE、Brier、NLL、AUSE、risk-coverage/AURC；
 - 延迟、峰值显存、FPS、J/frame、临时磁盘、metadata bytes/frame 和视频分钟成本。
-- perception、metric geometry、viewpoint、cross-view、visibility、thin structure、motion、navigation、safety、active perception、uncertainty、language和planning能力覆盖率；
+- perception、metric geometry、**metric terrain**、viewpoint、cross-view、visibility、
+  **perception reliability**、**failure attribution**、**landability**、**temporal change**、
+  **illumination robustness**、uncertainty、language 能力覆盖率；
+  （2026-08-25：移除 thin structure、motion、navigation、safety、active perception、planning，见 SPEC §49。）
 - pointcloud-native、Qwen 2D+metadata和multimodal-3D adapter的可用样本数；
 - 强监督、程序派生、过滤伪标签、弱标签和语言生成的比例。
 

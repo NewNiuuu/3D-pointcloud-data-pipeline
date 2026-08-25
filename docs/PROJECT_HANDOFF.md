@@ -1,5 +1,21 @@
 # PROJECT_HANDOFF
 
+> ## ⚠️ 阅读本文前必读（2026-08-25）
+>
+> **本文档第 1–18 节是历史记录**，按「只追加不改写」原则保留原貌。
+> 其中关于**低空差异化能力**的表述（薄障碍、可飞行空间、净空、航迹、TTC、
+> Next-best-view、occupancy、free space、Task Decomposition 等）
+> **已于 2026-08-25 整体作废** —— 它们基于尚未获得数据时的假设。
+>
+> UAVScenes 实测为**近垂直下视航测飞行**（俯角中位 87.6°，对地约 33 m），
+> 相机看不到飞行方向前方，上述能力**无法产生有效监督**。
+>
+> **现行能力范围见 §19.5**，实施依据见 `CLAUDE_CODE_PROJECT_SPEC.md` §40。
+>
+> 具体受影响处：§5.3 的 `<route_002>` 命名空间（保留但当前未使用）、
+> §5.4、§6.2 的专家分类、§8.1 的 Pipeline 草图、§8.2 的 L3 字段、
+> §9.2 的部分新增任务、§18.2 第 4 条。
+
 > 项目：低空无人机 2D 数据集到 3D 点云场景理解数据生成 Pipeline  
 > 交接日期：2026-08-23（Asia/Shanghai）  
 > 用途：让未参与此前对话的新 Codex Agent 仅凭本文即可继续调研、设计和实施。  
@@ -167,6 +183,9 @@ Qwen3.5 的标准接口读取文本、图像和视频，不直接消费 PLY/LAS 
 
 ### 5.3 稳定 ID 是统一任务接口
 
+> ⚠️ **本节含已作废的能力表述（2026-08-25）** —— 现行范围见 §19.5。原文保留作为历史。
+
+
 **[设计建议]** 使用：
 
 - `<obj_021>`：对象；
@@ -180,6 +199,9 @@ Qwen3.5 的标准接口读取文本、图像和视频，不直接消费 PLY/LAS 
 Qwen 输出这些 ID，系统再将 ID 映射回点云实例 mask、OBB、中心线或轨迹。
 
 ### 5.4 几何数值需要可验证
+
+> ⚠️ **本节含已作废的能力表述（2026-08-25）** —— 现行范围见 §19.5。原文保留作为历史。
+
 
 **[设计建议]** 距离、角度、方位、高度差、遮挡、净空、相交、TTC 等真值优先由几何程序计算；语言模型用于理解、组合和表达，不应成为唯一数值真值来源。
 
@@ -234,6 +256,9 @@ Qwen 输出这些 ID，系统再将 ID 映射回点云实例 mask、OBB、中心
 该表只应用于初步资源估算，正式工程需在目标硬件和目标分辨率上重新 profiling。
 
 ### 6.2 专家模型用于补充 Metadata
+
+> ⚠️ **本节含已作废的能力表述（2026-08-25）** —— 现行范围见 §19.5。原文保留作为历史。
+
 
 **[用户已确认]** 3D metadata 可以来自原数据集，也可以由专家模型从 2D 图像/视频提取。
 
@@ -309,6 +334,9 @@ Depth Anything 3 适合作为深度补充或一致性检查，但最终固定架
 
 ### 8.1 推荐 Pipeline
 
+> ⚠️ **本节含已作废的能力表述（2026-08-25）** —— 现行范围见 §19.5。原文保留作为历史。
+
+
 以下为**[设计建议]**，与用户固定架构兼容：
 
 ```text
@@ -376,6 +404,9 @@ Depth Anything 3 适合作为深度补充或一致性检查，但最终固定架
 - observer-relative relations。
 
 #### L3：时间、功能和行动
+
+> ⚠️ **本节含已作废的能力表述（2026-08-25）** —— 现行范围见 §19.5。原文保留作为历史。
+
 
 - 3D trajectory、velocity、acceleration；
 - TTC；
@@ -543,6 +574,11 @@ Caption 除自然语言外应保存结构化 claims，便于检查描述是否�
 
 ### 9.2 推荐新增任务
 
+> ⚠️ **部分条目已于 2026-08-25 移出范围**：Next-best-view Prediction、Route/Plan Critique。
+> 现行能力范围见 §19.5。其余条目（Cross-view Correspondence、Metadata Verification/Completion、
+> Viewpoint Transformation、Scene Graph Query、Geometry-aware Retrieval、3D Change Reasoning、
+> Spatial Counterfactual、Uncertainty-aware Reasoning、Grounded Measurement Dialogue）仍然有效。
+
 以下为**[设计建议]**，尚未确定实现优先级：
 
 1. **Cross-view 3D Correspondence**：判断不同视角的 2D 实例是否对应同一 3D 实体。
@@ -653,6 +689,10 @@ SkyLume 和 UrbanScene3D 体量较大，建议第二阶段再处理。
 
 ### 11.3 专项专家
 
+> ⚠️ **薄障碍专项模型（EDFNet / PowerLine-MTYOLO / TTPLA-YOLACT）当前不适用**
+> —— 近垂直下视数据无薄障碍监督（§19.5）。保留待引入前视数据集。
+
+
 - 笔记中的 `ETFNet` 应更正为 **EDFNet**：Early Fusion of Edge and Depth for Thin-Obstacle Segmentation in UAV Navigation，<https://arxiv.org/abs/2604.09694>
 - EDFNet/细线检测只能作为候选专家输出，超细结构仍需多视角、几何一致性和置信度检查。
 - 笔记提到小型无人机检测 SPAE-YOLOv8；尚未完成官方实现、数据许可和真实泛化能力核验。
@@ -758,6 +798,10 @@ pseudo_depth
 
 ### 14.3 专家模型层
 
+> ⚠️ **薄障碍专项模型（EDFNet / PowerLine-MTYOLO / TTPLA-YOLACT）当前不适用**
+> —— 近垂直下视数据无薄障碍监督（§19.5）。保留待引入前视数据集。
+
+
 - 已完成官方资料层面的专家模型调研和首版组合建议，下一步需要完成许可证审查、checkpoint 获取和 UAV 小样本实测；
 - 语义/实例首版候选：Grounded-SAM-2、SAM 2.1、SEA-RAFT、OneFormer、CABiNet、Florence-2、DINOv2；
 - 几何专家优先顺序已修订为 MoGe-3、DSINE、DA3-1.1；DA3-Streaming 仅用于长视频，CoTracker3/Trace Anything 用于轨迹和动态研究；
@@ -853,7 +897,8 @@ pseudo_depth
 
 1. Caption、Dialogue、Task Decomposition。
 2. 细线、空中目标和动态轨迹专家。
-3. Viewpoint Transformation、Next-best-view、Uncertainty-aware Reasoning。
+3. Viewpoint Transformation、Uncertainty-aware Reasoning。
+   （2026-08-25：移除 Next-best-view，属主动感知，见 §19.5。）
 4. 多数据集和仿真—真实泛化。
 
 ### Phase 5：规模化和 Benchmark
@@ -918,6 +963,11 @@ pseudo_depth
 
 ### 18.2 第四层：下游任务与能力补全
 
+> ⚠️ **本节第 4 条已于 2026-08-25 作废** —— 「低空差异化能力重点是薄障碍、开放空域
+> free/unknown/occupied、飞行净空、route、TTC、动态风险、Next-best-view」基于
+> 尚未获得数据时的假设。实测证明数据集不支持这些能力。**现行定义见 §19.5**。
+> 本节保留作为历史记录与未来引入前视数据集时的参考。
+
 用户明确要求把下游任务设计从metadata Pipeline和Skill系统中独立出来，成为第四个架构层。该层的目标不是只生成Qwen问答，而是生成可复用于Qwen、原生点云模型和多模态3D模型的统一任务标注。
 
 关键决策：
@@ -979,6 +1029,45 @@ pseudo_depth
 **对架构的影响**：SPEC §39/§41 定义的三类 adapter 中，`pointcloud_native`（原生点云模型 adapter）是 3D-GRPO 的直接消费接口，因此其优先级**不低于** `qwen_2d_metadata`。Canonical Task Record 必须保留 `pointcloud_ref` 与 3D target geometry（SPEC §41 已有此要求），这一条从"为将来预留"变为"已有明确消费方"。
 
 注意这不改变铁律 2/3：Qwen 在本架构中仍然只读 2D + metadata，不直接读点云。点云面向的是 3D-GRPO 那条原生点云路线。
+
+### 19.5 低空差异化能力范围重定义（2026-08-25）
+
+**[用户已确认]**
+
+**背景**：用户提供了一份基于大疆社区、Reddit r/drones/r/dji、MavicPilots 的无人机飞手
+痛点调研，并要求结合手上实际材料设计下游任务，明确表示不必被该报告的优先级牵着走。
+
+**实测发现（决定性）**：UAVScenes 相机**近垂直下视，俯角中位 87.6°（范围 84.6–88.8°），
+对地约 33 m**。这是航测/测绘飞行，**相机永远看不到飞行方向前方**。
+
+**因此被移出范围的能力**（§18.2 与 §9.2 中的相应设计随之作废）：
+
+薄障碍避让、前向避障、通道净空、可飞行体积、航迹可行性与瓶颈、TTC 与动态碰撞风险、
+Next-best-view 与主动感知、检查视角规划、有人机/鸟类避让、任务分解与计划批判。
+
+**理由**：强行生成会产出「形似导航训练数据、实则无有效监督」的样本，训练出虚假能力，
+违反铁律 5。
+
+**新的能力范围（方案 A —— 围绕数据实际支持重新定义）**，按优先级：
+
+| 优先级 | 能力 | 依据 |
+|---|---|---|
+| C1 | 感知可信度与失效归因 | LiDAR 与视觉深度残差可程序化产出失效标注；HKisland 约 40% 水面、HKairport 约 52% 均质硬化面为天然大样本；`*_Evening` 与日间航次同地点同航线，构成受控成像退化对照 |
+| C2 | 安全降落区评估 | 垂直下视正是评估降落区的视角；坡度/粗糙度由 LiDAR 确定性计算，表面类型有人工标注，动态占用有重复航次 |
+| C3 | 米制地形与高度推理 | Nadir 图像几乎不提供深度线索，这类数值无外观对应物，3D 必要性最强 |
+| C4 | 跨时相变化与光照鲁棒 | `*_Evening` 配对，几何真值相同，可区分真实三维变化与表观差异 |
+
+**排序依据**：不是「无人机需要什么能力」，而是「哪些能力的监督信号极难获得，
+而本数据集恰好能可靠产出」。三种难获取的监督形态 —— 与外观矛盾的答案、外观相同但答案不同、
+无外观对应物的数值 —— 本数据集均可大规模产出。
+
+**曾考虑但未采纳的方案 B**：保留导航能力并引入前视/侧视数据集（Mid-Air / FlyAwareV2 / UAVStereo）。
+用户选择方案 A 先行，理由是先用现有材料跑通完整链路；方案 B 作为后续扩展，届时
+SPEC §14.6/§14.7 的规则可直接启用，无需重写。
+
+**已同步修订**：SPEC §1/§13/§14.15/§16/§20.3/§23.4/§28.2/§34/§40/§41/§43/§44/§45/§46/§47/§49/§51、
+README 第四层与固定原则、AGENT_SKILL_SYSTEM_DESIGN §4.6、三个 Task Spec 的
+`low_altitude_specificity`（其中 metric 任务原声称「候选实体包含电线、杆塔」为**事实错误**，已改正）。
 
 ### 19.4 层级推进顺序调整：第三层降为润色层（2026-08-25）
 
@@ -1042,6 +1131,9 @@ pseudo_depth
 
 ## Next Agent Instructions
 
+> ⚠️ **先读 §19.4（第三层暂缓）与 §19.5（能力范围重定义）** —— 它们推翻了本文
+> 第 1–18 节中关于低空差异化能力与推进顺序的多项表述。
+
 接手后按以下顺序开始：
 
 1. 阅读本文件，然后完整阅读项目根目录的 `AGENTS.md`。
@@ -1058,7 +1150,9 @@ pseudo_depth
    - 3D Grounding；
    - Metric/Situated 3D VQA；
    - Cross-view Correspondence 或 Metadata Verification。
-6. 第一版 schema 只保留必要 L0/L1/L2 字段；不要一开始实现完整导航、TTC 和所有 L3 功能。
+6. 第一版 schema 只保留必要 L0/L1/L2 字段。**导航、TTC、可飞行空间、航迹类功能已于 2026-08-25
+   永久移出范围**（近垂直下视数据不支持，见 §19.5），不是「暂缓」而是**不做**。
+   L3 层的现行内容是可信度、可降落性、地形量与跨时相变化（SPEC §16）。
 7. 每个任务必须具有 `metadata_input_fields`、`hidden_target_fields`、`evidence` 和 `derivation_program/checker`。
 8. 首次实验必须包含 2D-only 与 2D+metadata 对照，验证 metadata 是否产生真实增益。
 9. 不要擅自：
