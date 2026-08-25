@@ -8,7 +8,7 @@ card_version: 0.1.0
 role: primary_pointcloud_reconstruction
 spec_ref: SPEC 铁律 1（点云主路径，不得替换）、§13、§34 vertical slice 第 3 步
 research_tier: fixed_main_path
-deployment_status: deployed_weights_verified
+deployment_status: deployed_verified_on_real_data
 environment:
   conda_env: nyp-3dpipe
   code: third_party/vggt-omega @ commit 282ec70

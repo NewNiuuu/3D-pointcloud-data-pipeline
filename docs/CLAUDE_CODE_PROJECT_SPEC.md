@@ -14,6 +14,11 @@
 > **在本数据集上无法产生有效监督**。强行生成会得到「看起来像导航训练数据、
 > 实际不是」的样本，训练出虚假能力 —— 这违反铁律 5。
 >
+> **但它们不是被放弃，而是降级为后续目标（2026-08-25 用户补充）。**
+> 理由是模型需要足够的能力**多样性（Diversity）**。实现路径是引入前视/侧视
+> 数据集（原方案 B），届时 §14.6/§14.7 与本节移下的设计可直接启用。
+> **当前阶段全力攻坚 §40.3 的 C1–C4，Task Family B 进入待办 backlog。**
+>
 > **新的能力范围见 §40。** 以下章节已按新定义重写：
 > §1（输出族）、§34（vertical slice）、§40（能力目标）、§43.2（低空特异性）、
 > §44/§45/§46（任务族）、§49（覆盖矩阵）、§51（发布顺序）。
@@ -101,7 +106,7 @@ Candidate extensions include:
 - Uncertainty-aware 3D Reasoning
 - Grounded Measurement Dialogue
 
-**已移出范围**（需前视/侧视导航数据，当前数据集不支持）：
+**降级为后续目标**（需前视/侧视导航数据，UAVScenes 不支持；保留以确保能力多样性）：
 Thin-Structure Annotation、Occupancy / Flyable Volume、Route Feasibility、
 Minimum Clearance、TTC / Collision Risk、Next-best-view、Inspection-view Planning、
 Route / Plan Critique、3D Task Decomposition（其步骤绑定 waypoint 与航迹约束）。
@@ -999,7 +1004,8 @@ Required order:
 Applicable to 需要模型先给候选、再由程序验证的任务。
 
 > **2026-08-25**：原文列举 task decomposition / plan critique / next-best-view，
-> 三者均已移出范围（§40.1）。本模式当前**无首批任务使用**，保留供后续扩展。
+> 三者当前无数据支撑（§40.1），已降级为后续目标。本模式**无首批任务使用**，
+> 待前视数据集引入后启用。
 
 Required order:
 
@@ -1686,7 +1692,7 @@ Vertical-slice order:
 13. Add DSINE only after testing whether independent normals provide measurable information gain.
 14. Evaluate DA3-1.1 disagreement calibration; add DA3-Streaming only for long-video scope.
 15. Only then consider Trace Anything、WorldMirror evaluation、或 §40.3 的 C1–C4 能力扩展。
-    （2026-08-25：原文的 thin-obstacle expansion 已移出范围，见 §40.1。）
+    （2026-08-25：thin-obstacle expansion 降级为后续目标，需前视数据集，见 §40.1。）
 
 ## 35. Implementation Stop Conditions
 
@@ -1932,7 +1938,7 @@ Qwen still MUST NOT consume raw point clouds in the current architecture. Point-
 ```
 
 > **2026-08-25**：本示例原为 `uav.route.minimum_clearance`（航迹净空），
-> 该任务族已按 §40.1 移出范围，示例改为 C1 感知可信度。
+> 该任务族当前无数据支撑（§40.1），示例改为 C1 感知可信度。原任务族保留为后续目标。
 
 Every target MUST map to at least one concrete 3D anchor:
 
@@ -2038,11 +2044,15 @@ These tasks SHOULD include hard cases where similar 2D appearance corresponds to
 
 ## 46. Task Family C: Aerial Perception Reliability, Landability, and Metric Terrain
 
-> **本节于 2026-08-25 整体重写。** 原内容（Occupancy / Flyable Volume / Route Feasibility /
-> Minimum Clearance / Corridor Bottleneck / Dynamic Collision Risk / Thin-obstacle Avoidance /
+> **本节于 2026-08-25 重写为航拍能力（C1–C4）。**
+>
+> 原内容（Occupancy / Flyable Volume / Route Feasibility / Minimum Clearance /
+> Corridor Bottleneck / Dynamic Collision Risk / Thin-obstacle Avoidance /
 > Next-best-view / Inspection-view Planning / Unknown-space Decision）针对前视导航数据，
-> **在近垂直下视的航测数据上无法产生有效监督**，已全部移除。原设计保留在
-> `PROJECT_HANDOFF.md` §18.2 作为历史，待引入前视/侧视数据集后可重新启用。
+> 在近垂直下视的航测数据上无法产生有效监督，故**不在当前实施范围**。
+>
+> **但它们仍是项目目标的一部分**（2026-08-25 用户补充：模型需要能力多样性），
+> 已移入 §46.5 作为后续待办。原设计完整保留在 `PROJECT_HANDOFF.md` §18.2。
 
 ### 46.1 C1 感知可信度与失效归因
 
@@ -2096,6 +2106,30 @@ These tasks SHOULD include hard cases where similar 2D appearance corresponds to
 
 **关键判据**：外观变了但几何没变 → 是光照/成像差异，**不是**场景变化。
 这正是「视觉系统不知道自己看不清」的直接检验。
+
+### 46.5 后续目标：导航类能力（Task Family B backlog）
+
+> **优先级低于 C1–C4，但不放弃**（2026-08-25 用户补充）。
+> 理由：模型需要足够的能力**多样性（Diversity）**；这些能力虽不如 C1 novel，
+> 却是无人机实用性的核心。
+
+| 能力 | 阻塞原因 | 解锁条件 |
+|---|---|---|
+| 薄障碍（电线/缆索/细枝）检测与中心线 | 33 m 近垂直下视无有效监督 | 前视/侧视数据集 + §14.6 规则启用 |
+| 前向避障与通道净空 | 相机看不到飞行方向前方 | 同上 |
+| Occupancy / free / unknown、可飞行体积 | 需前视几何与航线上下文 | 同上 + §14.7 推导链启用 |
+| 航迹可行性、瓶颈定位、最小净空 | 同上 | 同上 |
+| 动态碰撞风险、TTC、扫掠体重叠 | 无前视，动态目标稀少且像素占比极小 | 前视数据集 + 动态目标丰富的场景 |
+| Next-best-view、检查视角规划 | 航测航线预先规划，无主动视角决策 | 具备主动飞行决策的数据 |
+| 任务分解与计划批判 | 步骤绑定 waypoint 与航迹约束 | 上述能力就绪后 |
+
+**实施路径**：引入前视/侧视数据集（候选见 `PROJECT_HANDOFF.md` §19.5 的方案 B：
+Mid-Air / FlyAwareV2 / UAVStereo，均需重新做许可与可行性核验）。
+届时 §14.6（薄障碍证据规则）与 §14.7（可飞行空间推导链）**无需重写即可启用** ——
+这正是当初保留而非删除它们的原因。
+
+**在此之前**：UAVScenes 上**仍然不得**生成这些任务（铁律 5），
+数据不支持这一事实不因优先级调整而改变。
 
 ## 47. Task Family D: Grounded 3D Language and Interaction
 

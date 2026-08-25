@@ -161,6 +161,22 @@ MoGe 要 `numpy>=2`，VGGT-Ω 和 DA3 都要 `numpy<2`。另外 MoGe 还要一�
 
 ## VGGT-Ω（点云主路径）
 
+### 权重在魔搭上能直接下，而且验证是真的
+
+`facebook/VGGT-Omega` 官方命名空间、未 gating。载入后 **1411 个张量、1.1441B 参数、missing 0 / unexpected 0**，与模型定义完全匹配。
+
+**为什么重要**：HF 那边 `gated: manual` 需申请，卡住了整个第二层。而且魔搭的 `LICENSE.txt` 可直接读 —— 补上了专家卡里 `weights: 未知` 的空缺（FAIR NC v1，与代码许可一致）。
+
+### 真实数据跑通了，24 帧 1.67 秒
+
+UAVScenes AMtown01，峰值 8.29 GB，占卡程序未中断。两个对后续有直接影响的观察：
+
+- **深度是归一化的**（中位 1.02，起伏比 1.654）—— 需按相机轨迹锚定，且 `SCALE_RECOVERY_ANALYSIS` 的「重大修正」同样适用；
+- **低置信度像素占 21.7%** —— 这正是 C1 感知可信度能力的**天然候选区域**，不用另外构造。
+
+📄 `registry/experts/vggt_omega_1b_512.yaml`
+
+
 ### 代码能装，权重要申请
 
 代码在 GitHub 公开可克隆，**权重在 HuggingFace 是 `gated: manual`**，需要用账号提交申请、自动流程审核。

@@ -69,7 +69,7 @@ Skill 用于规定 Agent 如何决策、读取哪些规范、调用哪些校验�
 |---|---|---|---|
 | Program-first | Grounding、metric VQA、cross-view correspondence | 几何程序、匹配器、原生标注 | 问题自然化、指代理解、结构化回答 |
 | Hybrid | Caption、Dialogue、Metadata Verification | 程序生成 claims/冲突，再由模型表达 | 组织语言、跨轮推理、解释 |
-| Model-first constrained | *（当前无首批任务使用）* | 模型先生成候选，程序和规则验证 | 规划、解释、修复候选<br/>**2026-08-25：原列 Task Decomposition 与 Next-best-view，二者已移出范围，见 SPEC §40.1** |
+| Model-first constrained | *（当前无首批任务使用）* | 模型先生成候选，程序和规则验证 | 规划、解释、修复候选<br/>**2026-08-25：原列 Task Decomposition 与 Next-best-view，二者当前无数据支撑，已降级为后续目标（SPEC §46.5）** |
 
 ### 3.3 生成与评估解耦
 

@@ -42,6 +42,25 @@
 | R-18 | SEA-RAFT / CABiNet 部署 | 建议 | 二 | 权重不在 HF；SEA-RAFT 的残差光流最终仍需 R-01 |
 | R-19 | 其余 21 个候选数据集建卡 | 建议 | 一 | Phase 2 |
 
+### 📦 后续目标 backlog（优先级低于主干，但不放弃）
+
+> **2026-08-25 用户补充**：细线检测、安全性检测这类能力相对 C1 没那么 novel，
+> 但**模型需要足够的能力多样性（Diversity）**。因此它们不是被放弃，只是优先级放在 C1–C4 之后。
+> **在 UAVScenes 上仍然不得生成** —— 数据不支持这一事实不因优先级调整而改变。
+
+| # | 需求 | 来源 | 解锁条件 |
+|---|---|---|---|
+| R-30 | 薄障碍（电线/缆索/细枝）检测与中心线 | 商讨 | 前视/侧视数据集；SPEC §14.6 规则已就绪可直接启用 |
+| R-31 | 前向避障、通道净空、最小净空 | 商讨 | 同上 |
+| R-32 | Occupancy / free / unknown、可飞行体积 | 商讨 | 同上；SPEC §14.7 推导链已就绪 |
+| R-33 | 航迹可行性、瓶颈定位 | 商讨 | 同上 |
+| R-34 | 动态碰撞风险、TTC、扫掠体重叠 | 商讨 | 前视数据 + 动态目标丰富的场景 |
+| R-35 | Next-best-view、检查视角规划 | 商讨 | 具备主动飞行决策的数据 |
+| R-36 | 任务分解与计划批判 | 商讨 | 上述能力就绪后 |
+| R-37 | **引入前视/侧视数据集**（原方案 B） | 商讨 | **这是解锁 R-30～R-36 的前置项**。候选 Mid-Air / FlyAwareV2 / UAVStereo，均需重做许可与可行性核验 |
+
+详见 `CLAUDE_CODE_PROJECT_SPEC.md` §46.5 与 Release D。
+
 ### ⏸️ 暂缓（已决定推迟）
 
 | # | 需求 | 来源 | 说明 |
@@ -58,35 +77,35 @@
 
 | # | 需求 | 来源 | 产出 |
 |---|---|---|---|
-| R-30 | 设计改动立即同步文档 | 用户 | `CLAUDE.md` 规则 1 + 文档职责映射表 |
-| R-31 | 占卡程序保持挂载 | 用户 | `CLAUDE.md` 规则 2 |
-| R-32 | 显卡监听守护程序 | 用户 | `scripts/gpu_guard.sh`，20 分钟一轮，实测自动拉起 |
-| R-33 | 人工输入登记簿 | 用户 | `docs/MANUAL_INPUTS.md` + `secrets/` 自屏蔽目录 |
-| R-34 | 变更日志 | 用户 | `docs/CHANGELOG.md`，六类标签，只追加不改写 |
-| R-35 | 待删除清单（Agent 不执行删除） | 用户 | `docs/PENDING_DELETIONS.md` |
-| R-36 | 同步到独立 GitHub 仓库 | 用户 | `NewNiuuu/3D-pointcloud-data-pipeline` |
-| R-37 | Blob 数据路径登记 | 用户 | `MANUAL_INPUTS.md` §3，D-001/D-002 含实测结构 |
-| R-38 | 调研结果另记简明文档 | 用户 | `docs/FINDINGS.md`，结论先行 |
-| R-39 | 项目专属 conda 环境 | 用户 | `nyp-3dpipe` + `nyp-moge`；`CLAUDE.md` 规则 3 |
-| R-40 | 修正 git 提交作者 | 用户 | 9 个提交改写，仓库级身份固化 |
-| R-41 | README 作为追踪文档 | 用户 | 本表 |
-| R-42 | 四项实施边界决策 | 商讨 | 首批数据集 / metric 政策 / 首批任务 / Qwen 暂缓 |
-| R-43 | 数据许可政策 | 商讨 | 接受 CC BY-NC-SA 4.0 学术用途 |
-| R-44 | 项目定位与 3D-GRPO 关系 | 商讨 | 产出「点云 + 任务标注」一对；3D-GRPO 是下游训练框架 |
-| R-45 | 首批数据集获取与 G0 | 建议 | UAVScenes 35 GB；card / 许可 / 文件清单 |
-| R-46 | 冻结契约（vertical slice 1） | 建议 | `core/`：ID、状态机、枚举、57 错误码、artifact 血缘 |
-| R-47 | Dataset Adapter（vertical slice 2） | 建议 | `adapters/uavscenes/`，3 个场景落盘 |
-| R-48 | 确定性几何 + checker（vs 7） | 建议 | `geometry/` 17 函数 + `checkers/` 4 个 |
+| R-60 | 设计改动立即同步文档 | 用户 | `CLAUDE.md` 规则 1 + 文档职责映射表 |
+| R-61 | 占卡程序保持挂载 | 用户 | `CLAUDE.md` 规则 2 |
+| R-62 | 显卡监听守护程序 | 用户 | `scripts/gpu_guard.sh`，20 分钟一轮，实测自动拉起 |
+| R-63 | 人工输入登记簿 | 用户 | `docs/MANUAL_INPUTS.md` + `secrets/` 自屏蔽目录 |
+| R-64 | 变更日志 | 用户 | `docs/CHANGELOG.md`，六类标签，只追加不改写 |
+| R-65 | 待删除清单（Agent 不执行删除） | 用户 | `docs/PENDING_DELETIONS.md` |
+| R-66 | 同步到独立 GitHub 仓库 | 用户 | `NewNiuuu/3D-pointcloud-data-pipeline` |
+| R-67 | Blob 数据路径登记 | 用户 | `MANUAL_INPUTS.md` §3，D-001/D-002 含实测结构 |
+| R-68 | 调研结果另记简明文档 | 用户 | `docs/FINDINGS.md`，结论先行 |
+| R-69 | 项目专属 conda 环境 | 用户 | `nyp-3dpipe` + `nyp-moge`；`CLAUDE.md` 规则 3 |
+| R-70 | 修正 git 提交作者 | 用户 | 9 个提交改写，仓库级身份固化 |
+| R-71 | README 作为追踪文档 | 用户 | 本表 |
+| R-72 | 四项实施边界决策 | 商讨 | 首批数据集 / metric 政策 / 首批任务 / Qwen 暂缓 |
+| R-73 | 数据许可政策 | 商讨 | 接受 CC BY-NC-SA 4.0 学术用途 |
+| R-74 | 项目定位与 3D-GRPO 关系 | 商讨 | 产出「点云 + 任务标注」一对；3D-GRPO 是下游训练框架 |
+| R-75 | 首批数据集获取与 G0 | 建议 | UAVScenes 35 GB；card / 许可 / 文件清单 |
+| R-76 | 冻结契约（vertical slice 1） | 建议 | `core/`：ID、状态机、枚举、57 错误码、artifact 血缘 |
+| R-77 | Dataset Adapter（vertical slice 2） | 建议 | `adapters/uavscenes/`，3 个场景落盘 |
+| R-78 | 确定性几何 + checker（vs 7） | 建议 | `geometry/` 17 函数 + `checkers/` 4 个 |
 | R-12 | **L2-S6 任务编译** | 建议 | 编译器 + 4 个推导程序 + 19 项测试。运行时泄漏检查、候选确定性打乱、资格判定分离场景级与任务时量 |
 | R-11 | **Canonical Task Record + 三类 adapter** | 建议 | schema + 三路 adapter + 基类强制的泄漏防护 + 31 项测试。产出为 **ShareGPT 格式** |
 | R-10 | **冻结 L0/L1/L2 Metadata Schema** | 建议 | 4 个 schema（版本 0.1.0）+ `core/metadata.py` 跨层校验 + 39 项测试。新增 `surface` 实体类型（C2/C3 的锚点）；L2 强制 `derivation` |
-| R-49 | Task Spec（vertical slice 8） | 建议 | 4 个，覆盖 3 个任务族 |
-| R-50 | 专家模型许可核验与部署 | 用户 | 9 张专家卡；7 个已部署验证 |
-| R-51 | 现有点云语料分析 | 用户 | `docs/BASELINE_POINTCLOUD_ANALYSIS.md` |
-| R-52 | VGGT-Ω 部署与输出契约 | 用户 | 代码就绪；输出契约实测确认 |
-| R-53 | 尺度转换关系调查 | 用户 | `docs/SCALE_RECOVERY_ANALYSIS.md`。**结论：数学成立但精度受重建稳定性限制** |
-| R-55 | **下游任务能力范围重定义（方案 A）** | 商讨 | 结合飞手痛点调研 + 数据实测，确定 C1 感知可信度 / C2 可降落性 / C3 米制地形 / C4 跨时相；移除全部导航类能力。已同步 17 个 SPEC 章节 + 4 份文档 + 3 个 Task Spec |
-| R-54 | 基线阈值定准 | 用户 | **结论是定不出来** —— 推翻了此前两条结论，详见 §C |
+| R-79 | Task Spec（vertical slice 8） | 建议 | 4 个，覆盖 3 个任务族 |
+| R-80 | 专家模型许可核验与部署 | 用户 | 9 张专家卡；7 个已部署验证 |
+| R-81 | 现有点云语料分析 | 用户 | `docs/BASELINE_POINTCLOUD_ANALYSIS.md` |
+| R-82 | VGGT-Ω 部署与输出契约 | 用户 | 代码就绪；输出契约实测确认 |
+| R-83 | 尺度转换关系调查 | 用户 | `docs/SCALE_RECOVERY_ANALYSIS.md`。**结论：数学成立但精度受重建稳定性限制** |
+| R-85 | **下游任务能力范围重定义（方案 A）** | 商讨 | 结合飞手痛点调研 + 数据实测，确定 C1 感知可信度 / C2 可降落性 / C3 米制地形 / C4 跨时相；移除全部导航类能力。已同步 17 个 SPEC 章节 + 4 份文档 + 3 个 Task Spec |
+| R-84 | 基线阈值定准 | 用户 | **结论是定不出来** —— 推翻了此前两条结论，详见 §C |
 
 ---
 

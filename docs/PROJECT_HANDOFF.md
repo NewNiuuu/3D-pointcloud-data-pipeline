@@ -574,7 +574,7 @@ Caption 除自然语言外应保存结构化 claims，便于检查描述是否�
 
 ### 9.2 推荐新增任务
 
-> ⚠️ **部分条目已于 2026-08-25 移出范围**：Next-best-view Prediction、Route/Plan Critique。
+> ⚠️ **部分条目当前无数据支撑，已降级为后续目标**：Next-best-view Prediction、Route/Plan Critique。见 §19.7。
 > 现行能力范围见 §19.5。其余条目（Cross-view Correspondence、Metadata Verification/Completion、
 > Viewpoint Transformation、Scene Graph Query、Geometry-aware Retrieval、3D Change Reasoning、
 > Spatial Counterfactual、Uncertainty-aware Reasoning、Grounded Measurement Dialogue）仍然有效。
@@ -1040,7 +1040,7 @@ pseudo_depth
 **实测发现（决定性）**：UAVScenes 相机**近垂直下视，俯角中位 87.6°（范围 84.6–88.8°），
 对地约 33 m**。这是航测/测绘飞行，**相机永远看不到飞行方向前方**。
 
-**因此被移出范围的能力**（§18.2 与 §9.2 中的相应设计随之作废）：
+**因此当前实施范围不含的能力**（§18.2 与 §9.2 的相应设计**保留为后续目标**）：
 
 薄障碍避让、前向避障、通道净空、可飞行体积、航迹可行性与瓶颈、TTC 与动态碰撞风险、
 Next-best-view 与主动感知、检查视角规划、有人机/鸟类避让、任务分解与计划批判。
@@ -1086,6 +1086,28 @@ README 第四层与固定原则、AGENT_SKILL_SYSTEM_DESIGN §4.6、三个 Task 
 对本 Pipeline 的含义：`pointcloud_native` adapter 的产出目标是**规范的 ShareGPT 记录**，
 而非迁就某个框架的当前实现。adapter 的职责是**把判分所需信息给全**
 （checker 名、容差、hidden_target），训练侧据此按数据类型实现 reward。
+
+### 19.7 导航类能力保留为后续目标（2026-08-25 补充）
+
+**[用户已确认]**
+
+对 §19.5 的补充修正。用户重新考虑后指出：细线检测、安全性检测这类能力
+**相对 C1 确实没那么 novel，但模型需要足够的能力多样性（Diversity）**
+（该要求此前已在文档中提出）。
+
+**因此 §19.5 中「移出范围」的措辞过强，应修正为**：
+
+- 这些能力**不在当前实施范围**（UAVScenes 数据确实不支持，这一点不变）；
+- 但**保留为后续目标**，进入待办 backlog（SPEC §46.5 / Release D）；
+- **当前阶段全力攻坚 C1–C4**，Task Family B 的优先级放在其后。
+
+**不变的部分**：在 UAVScenes 上**仍然不得**生成这些任务 ——
+数据不支持这一事实不因优先级调整而改变（铁律 5）。
+解锁条件是引入前视/侧视数据集（原方案 B）。
+
+**已同步修订**：SPEC §40.1 的重定义横幅、§1 输出族、§20.3、§34、§41、§46（新增
+§46.5 backlog 表）、§51（新增 Release D）；`AGENT_SKILL_SYSTEM_DESIGN.md` §3.2；
+本文 §9.2 与 Next Agent Instructions 第 6 条。
 
 ### 19.4 层级推进顺序调整：第三层降为润色层（2026-08-25）
 
@@ -1168,9 +1190,10 @@ README 第四层与固定原则、AGENT_SKILL_SYSTEM_DESIGN §4.6、三个 Task 
    - 3D Grounding；
    - Metric/Situated 3D VQA；
    - Cross-view Correspondence 或 Metadata Verification。
-6. 第一版 schema 只保留必要 L0/L1/L2 字段。**导航、TTC、可飞行空间、航迹类功能已于 2026-08-25
-   永久移出范围**（近垂直下视数据不支持，见 §19.5），不是「暂缓」而是**不做**。
-   L3 层的现行内容是可信度、可降落性、地形量与跨时相变化（SPEC §16）。
+6. 第一版 schema 只保留必要 L0/L1/L2 字段。**导航、TTC、可飞行空间、航迹类功能
+   当前不实施**（近垂直下视数据不支持，见 §19.5），但**保留为后续目标**
+   （SPEC §46.5，需引入前视数据集）。L3 层的现行内容是可信度、可降落性、
+   地形量与跨时相变化（SPEC §16）。
 7. 每个任务必须具有 `metadata_input_fields`、`hidden_target_fields`、`evidence` 和 `derivation_program/checker`。
 8. 首次实验必须包含 2D-only 与 2D+metadata 对照，验证 metadata 是否产生真实增益。
 9. 不要擅自：
