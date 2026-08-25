@@ -1,0 +1,54 @@
+# Expert Card: VGGT-Ω 1B @512（点云主路径，铁律 1）
+# Contract: SPEC §23.2
+# 核验日期: 2026-08-25
+
+expert_id: vggt_omega_1b_512
+display_name: VGGT-Ω 1B @512
+card_version: 0.1.0
+role: primary_pointcloud_reconstruction
+spec_ref: SPEC 铁律 1（点云主路径，不得替换）、§13、§34 vertical slice 第 3 步
+research_tier: fixed_main_path
+deployment_status: code_ready_weights_downloading
+environment:
+  conda_env: nyp-3dpipe
+  code: third_party/vggt-omega @ commit 282ec70
+sources:
+  repository: https://github.com/facebookresearch/vggt-omega
+  weights_official: https://huggingface.co/facebook/VGGT-Omega
+  weights_used: https://www.modelscope.cn/models/facebook/VGGT-Omega
+  weights_source_note: HF 上为 gated:manual 需申请（用户已提交）。同事提示魔搭有同一模型，经查为 facebook/ 官方命名空间发布，482 次下载，文件 vggt_omega_1b_512.pt
+    大小 4576.7 MB —— 与实测的 1.144B 参数 × 4 字节 = 4.58 GB 精确吻合，曾以此作为真伪佐证；但 modelscope SDK 下载时显示总量 3.34G，与 API 元信息不一致，
+      **最终大小与可加载性须在下载完成后实测确认**，不得仅凭元信息断言。魔搭侧未实施 gating，但 README 中保留了原始的 extra_gated_fields（姓名/国家/机构/接受条款），说明发布方设有访问登记。
+license:
+  code: FAIR Noncommercial Research License v1
+  weights: FAIR Noncommercial Research License v1
+  weights_license_verified_at: '2026-08-25'
+  weights_license_source: https://www.modelscope.cn 上的 LICENSE.txt（HF 侧需授权才可见）
+  training_allowed: true
+  evaluation_only: false
+  key_clause: '''You will not use the Research Materials or any outputs or results ... for any uses other
+    than Noncommercial Research Uses'' —— 输出受非商用限制，但**没有** WorldMirror 那条『禁止用输出改进其他 AI 模型』。因此 VGGT-Ω 的输出**可以**进入训练
+    metadata（SPEC §14.14 对比）。'
+  note: 权重许可与代码许可完全一致，此前因 HF gating 无法核验，现已确认。
+io_contract:
+  entry: vggt_omega.models.VGGTOmega + utils.pose_enc.encoding_to_camera
+  outputs:
+    pose_enc: (B,S,9)
+    depth: (B,S,H,W,1)
+    depth_conf: (B,S,H,W)
+    camera_and_register_tokens: (B,S,17,2048)
+    images: (B,S,3,H,W)
+    extrinsics: (B,S,3,4)
+    intrinsics: (B,S,3,3)
+  note: 以随机权重实测确认，SPEC §13 所称输出能力全部属实
+measured:
+  params_billion: 1.144
+  fp32_weight_gb: 4.58
+  peak_vram_gb_2frames_512: 6.53
+  official_reference: 'A100: 1 帧 6.02 GB / 10 帧 6.67 GB / 100 帧 13.37 GB'
+uav_validation_status: not_started
+production_ready: false
+blocking_issues:
+- 权重下载中；下载完成后需在 UAVScenes 真实场景上验证重建质量、尺度、动态拖影、水面/反射失效（后者正是 C1 能力的输入）
+benchmark_contamination_notice: 官方 2026-08-18 公告：1B 模型的祖先 checkpoint 可能存在 benchmark 污染，论文 Table 1/2 的
+  1B 行性能可能虚高。不影响作为数据生成组件使用，但**不得**将论文 benchmark 数字作为本项目性能依据。
