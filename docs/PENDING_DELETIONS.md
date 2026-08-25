@@ -21,6 +21,7 @@
 
 | # | 路径 | 体积 | 原因 | 记录时间 |
 |---|---|---:|---|---|
+| X-007 | Blob 远程：`output/liyan/nyp_0825/.git/objects/pack/tmp_pack_sBdTzc` | **6.80 GiB** | **被误备份的 git 废弃临时 pack**。2026-08-24 16:35 一次中断的 git 操作留下的临时文件，首轮全量备份时被一并上传。git 自己迟早会清掉本地那份，blob 上这份则会永久滞留。**当前 token 无 `d` 权限，Agent 删不掉**（同 M-009）。教训已记入 FINDINGS：备份排除项该把 `.git/objects/pack/tmp_pack_*` 纳进去 | 2026-08-25 |
 | X-004 | Blob 远程：`output/liyan/_perm_probe/`<br>`output/liyan/_perm_probe2/`<br>`output/liyan/_perm_probe3/`<br>`output/liyan/_srctest/`<br>`output/liyan/_rntest_0825/`<br>`output/liyan/_ovtest/`<br>`output/liyan/_ovtest2/`<br>`output/liyan/.perm_probe` | < 1 KB | **备份改造与覆盖语义验证时的探针残留**。用于验证 SAS token 的写入/服务端复制/删除权限、azcopy 目录改名与通配上传的真实语义，以及 `--overwrite ifSourceNewer` 的实际行为。结论已记入 CHANGELOG 与 FINDINGS，目录本身无用。**当前 token 权限 `racwl` 缺 `d`，Agent 删不掉**，需用带删除权限的 token 清理（同 M-009） | 2026-08-25 |
 | X-005 | Blob 远程：`output/liyan/nyp_0823/` | 0 B | **空目录**。8-23 配置的备份从未成功上传过一个字节（token 过期，86 轮全 403），只留下一个空目录名。已由 `nyp_0825` 取代 | 2026-08-25 |
 | X-006 | `/home/aiscuser/.blob_backup.sh`<br>`/home/aiscuser/.blob_backup.log`<br>`/home/aiscuser/.blob_backup.log.failed_0823-0825.bak` | ~30 KB | **blob_manager 旧备份机制的残留**。备份已迁到 `nyp/scripts/blob_backup.sh`，`.blob_backup.json` 的路径已清空。`.log.failed_*.bak` 是那 86 轮失败日志的存档，**确认过失败原因后再删**（保留一阵有助于复盘）。注意 `.blob_backup.pid` 仍在用（见脚本里的 COMPAT_PID_FILE），**不要删** | 2026-08-25 |
@@ -48,6 +49,9 @@ for d in _perm_probe _perm_probe2 _perm_probe3 _srctest _rntest_0825 _ovtest _ov
     azcopy rm --recursive "${R}/${d}?${TOKEN}"
 done
 azcopy rm "${R}/.perm_probe?${TOKEN}"
+
+# X-007 被误备份的 git 废弃临时 pack（6.8 GiB）
+azcopy rm "${R}/nyp_0825/.git/objects/pack/tmp_pack_sBdTzc?${TOKEN}"
 
 # X-006 旧备份机制残留（.blob_backup.pid 仍在用，不在此列）
 rm -f /home/aiscuser/.blob_backup.sh /home/aiscuser/.blob_backup.log
